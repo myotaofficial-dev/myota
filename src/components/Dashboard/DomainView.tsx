@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import type { CoHost } from '../../context/HotelContext';
 import {
   Info, FileText, Sparkles, MapPin, Phone, UserCheck,
-  ShieldCheck, Image, Trash2, Plus, Search, X, Pencil, Check
+  ShieldCheck, Image, Trash2, Plus, Search, X, Pencil, Check,
+  Bold, Italic, Underline, Link, Code, List, ListOrdered, Quote, Undo, Redo
 } from 'lucide-react';
 import { MediaUpload } from '../ui/MediaUpload';
 
@@ -155,6 +156,169 @@ const MASTER_AMENITIES: string[] = [
   "Wake-up Service","Wedding & Banquet Services","Welcome Drink","Well-Maintained Washrooms",
   "Wi-Fi","Wide Internal Roads","Wooden Cottages","Work Desks","Yoga Spaces"
 ];
+
+interface RichTextEditorProps {
+  value: string;
+  onChange: (val: string) => void;
+}
+
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // Update editor innerHTML only when value changes externally,
+  // avoiding cursor jump issues by checking if they match first.
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || '<p><br></p>';
+    }
+  }, [value]);
+
+  const handleCommand = (command: string, arg: string = '') => {
+    document.execCommand(command, false, arg);
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const handleLink = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString()) {
+      const url = prompt('Enter link URL:', 'https://');
+      if (url) {
+        handleCommand('createLink', url);
+      }
+    } else {
+      alert('Please select some text first to link it.');
+    }
+  };
+
+  return (
+    <div className="border border-zinc-200 rounded-xl overflow-hidden flex flex-col bg-white shadow-xs font-sans">
+      {/* Toolbar */}
+      <div className="bg-[#FAF8FF] border-b border-zinc-200 px-3 py-2.5 flex flex-wrap items-center gap-1.5 select-none">
+        {/* Paragraph select */}
+        <select
+          onChange={(e) => handleCommand('formatBlock', e.target.value)}
+          className="bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-[11px] font-bold outline-hidden transition cursor-pointer text-zinc-650 h-7 pr-6 relative"
+          defaultValue="p"
+        >
+          <option value="p">Paragraph</option>
+          <option value="h2">Heading 1</option>
+          <option value="h3">Heading 2</option>
+          <option value="blockquote">Quote</option>
+          <option value="pre">Code Block</option>
+        </select>
+
+        <div className="h-4 w-px bg-zinc-200 mx-1" />
+
+        {/* Action Buttons */}
+        <button
+          type="button"
+          onClick={() => handleCommand('bold')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Bold"
+        >
+          <Bold className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleCommand('italic')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Italic"
+        >
+          <Italic className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleCommand('underline')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Underline"
+        >
+          <Underline className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="h-4 w-px bg-zinc-200 mx-1" />
+
+        <button
+          type="button"
+          onClick={handleLink}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Insert Link"
+        >
+          <Link className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleCommand('formatBlock', 'pre')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Code Block"
+        >
+          <Code className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="h-4 w-px bg-zinc-200 mx-1" />
+
+        <button
+          type="button"
+          onClick={() => handleCommand('insertUnorderedList')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Bullet List"
+        >
+          <List className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleCommand('insertOrderedList')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Numbered List"
+        >
+          <ListOrdered className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleCommand('formatBlock', 'blockquote')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Blockquote"
+        >
+          <Quote className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="h-4 w-px bg-zinc-200 mx-1" />
+
+        <button
+          type="button"
+          onClick={() => handleCommand('undo')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Undo"
+        >
+          <Undo className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleCommand('redo')}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-150 flex items-center justify-center text-zinc-600 hover:text-zinc-950 transition cursor-pointer active:scale-95"
+          title="Redo"
+        >
+          <Redo className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Editable Content Frame */}
+      <div
+        ref={editorRef}
+        contentEditable
+        onBlur={() => {
+          if (editorRef.current) onChange(editorRef.current.innerHTML);
+        }}
+        onInput={() => {
+          if (editorRef.current) onChange(editorRef.current.innerHTML);
+        }}
+        className="w-full min-h-[220px] max-h-[380px] p-4 text-xs text-zinc-800 outline-hidden overflow-y-auto text-left leading-relaxed [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_pre]:bg-zinc-100 [&_pre]:p-2.5 [&_pre]:rounded-md [&_pre]:font-mono [&_a]:text-blue-600 [&_a]:underline"
+      />
+    </div>
+  );
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export const DomainView: React.FC = () => {
@@ -438,24 +602,22 @@ export const DomainView: React.FC = () => {
         <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Short description displays on homepage; detailed narrative shows in "Read More" popup.</p>
       </div>
       <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Short Description</label>
-        <p className="text-5xs text-zinc-400">Brief summary/philosophy shown initially in the About section.</p>
+        <label className="text-[11px] font-bold text-zinc-700">Short Description</label>
+        <p className="text-4xs text-zinc-400 font-medium">Shown as the first section of the property page, before the "Read more" button.</p>
         <textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} rows={3}
           placeholder="e.g. Escape to a world where tranquillity meets luxury..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none" />
+          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans leading-relaxed" />
       </div>
       <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Detailed / Long Description</label>
-        <p className="text-5xs text-zinc-400">Detailed paragraph about your property's history, food, pools, amenities, and environment.</p>
-        <textarea value={detailedDescription} onChange={e => setDetailedDescription(e.target.value)} rows={6}
-          placeholder="e.g. Nestled on the scenic hills overlooking Yercaud..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none" />
+        <label className="text-[11px] font-bold text-zinc-700">Long Description (About the Property)</label>
+        <p className="text-4xs text-zinc-400 font-medium">Provide a detailed overview of your property, history, surroundings, and what makes it unique.</p>
+        <RichTextEditor value={detailedDescription} onChange={setDetailedDescription} />
       </div>
       <div className="space-y-1.5 text-left">
         <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">General Fallback Text</label>
-        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
           placeholder="General description fallback..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none" />
+          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none font-sans leading-relaxed" />
       </div>
     </div>
   );

@@ -1116,7 +1116,7 @@ export const OrganicTemplate: React.FC = () => {
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 flex flex-col overflow-y-auto bg-[#FAF6F0] text-[#333D29] relative"
+      className="flex-1 overflow-y-auto bg-[#FAF6F0] text-[#333D29] relative"
       style={{ fontFamily: "'Lexend', 'Plus Jakarta Sans', sans-serif" }}
     >
       <div className="bg-[#FAF6F0] relative z-10 shadow-2xl">
@@ -1468,7 +1468,10 @@ export const OrganicTemplate: React.FC = () => {
               </button>
             </div>
             <div className="p-6">
-              <p className="text-[0.9rem] leading-[1.8] text-zinc-600 font-light whitespace-pre-wrap">{hotelInfo.detailedDescription}</p>
+              <div 
+                className="text-[0.9rem] leading-[1.8] text-zinc-655 font-light text-left [&_p]:mb-3.5 [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:bg-zinc-150 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:font-mono [&_a]:text-blue-600 [&_a]:underline whitespace-normal"
+                dangerouslySetInnerHTML={{ __html: hotelInfo.detailedDescription || '' }}
+              />
             </div>
           </div>
         </div>
