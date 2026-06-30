@@ -3,8 +3,8 @@ import { useHotel } from '../../context/HotelContext';
 import { CustomPageRenderer } from './CustomPageRenderer';
 import { BentoGallery } from '../ui/bento-gallery';
 import { StaggerTestimonials } from '@/components/ui/stagger-testimonials';
-import { 
-  Star, Phone, Mail, 
+import {
+  Star, Phone, Mail,
   MapPin, Check, ChevronRight, X, Sparkles, MessageCircle,
   Clock, Shield, ArrowLeft, ArrowRight, Calendar
 } from 'lucide-react';
@@ -27,8 +27,8 @@ const InstagramIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 export const OrganicTemplate: React.FC = () => {
-  const { 
-    hotelInfo, rooms, pricing, addons, coupons, 
+  const {
+    hotelInfo, rooms, pricing, addons, coupons,
     testimonials, faqs, policies, addBooking, canvasMode, setSelectedView, setEditorFocus,
     guestEvents, customPages, previewPath, setPreviewPath
   } = useHotel();
@@ -44,7 +44,7 @@ export const OrganicTemplate: React.FC = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '');
   const [guestsCount, setGuestsCount] = useState(2);
   const [promoCode, setPromoCode] = useState('');
-  
+
   // Modal / Drawer state
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [bookingStep, setBookingStep] = useState<'details' | 'success'>('details');
@@ -64,7 +64,7 @@ export const OrganicTemplate: React.FC = () => {
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>({});
   const [appliedCouponCode, setAppliedCouponCode] = useState<string>('');
   const [couponError, setCouponError] = useState<string | null>(null);
-  
+
   // Contact Form inside Need Help Section
   const [contactMessage, setContactMessage] = useState('');
   const [contactSuccess, setContactSuccess] = useState(false);
@@ -127,11 +127,11 @@ export const OrganicTemplate: React.FC = () => {
   // Price calculations
   const calculateTotal = () => {
     if (!selectedRoom) return { subtotal: 0, discount: 0, addonTotal: 0, grandTotal: 0, nights: 0 };
-    
+
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     const nights = differenceInDays(end, start);
-    
+
     if (isNaN(nights) || nights <= 0) return { subtotal: 0, discount: 0, addonTotal: 0, grandTotal: 0, nights: 0 };
 
     let subtotal = 0;
@@ -172,7 +172,7 @@ export const OrganicTemplate: React.FC = () => {
     e.preventDefault();
     setCouponError(null);
     const coupon = coupons.find(c => c.code === promoCode.toUpperCase() && c.active);
-    
+
     if (coupon) {
       setAppliedCouponCode(coupon.code);
     } else {
@@ -331,12 +331,11 @@ export const OrganicTemplate: React.FC = () => {
   // Dynamic Section Components mapping
   const sectionComponents: Record<string, React.ReactNode> = {
     hero: (
-      <section 
+      <section
         key="hero"
         onClick={(e) => triggerEdit('hero', e)}
-        className={`relative h-[80vh] shrink-0 overflow-hidden flex items-end justify-start text-left px-6 sm:px-12 pb-16 sm:pb-20 pt-28 group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-[-2px]' : ''
-        }`}
+        className={`relative h-[80vh] shrink-0 overflow-hidden flex items-end justify-start text-left px-6 sm:px-12 pb-16 sm:pb-20 pt-28 group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-[-2px]' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-20 left-4 bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-40 border border-blue-400 font-sans">
@@ -347,35 +346,35 @@ export const OrganicTemplate: React.FC = () => {
         {/* Background styles */}
         {hotelInfo.heroStyle === 'single' && (
           <div className="absolute inset-0 bg-[#333D29]">
-            <img 
-              src={hotelInfo.heroImages?.[0] || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1200"} 
+            <img
+              src={hotelInfo.heroImages?.[0] || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1200"}
               alt="Organic Facade"
-              className="w-full h-full object-cover opacity-60 sepia-[15%]" 
+              className="w-full h-full object-cover opacity-60 sepia-[15%]"
             />
           </div>
         )}
 
         {hotelInfo.heroStyle === 'single' && (
           <div className="absolute inset-0 bg-[#333D29]">
-            <img 
-              src={hotelInfo.heroImages?.[0] || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1200"} 
+            <img
+              src={hotelInfo.heroImages?.[0] || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1200"}
               alt="Organic Facade"
-              className="w-full h-full object-cover opacity-60 sepia-[15%]" 
+              className="w-full h-full object-cover opacity-60 sepia-[15%]"
             />
           </div>
         )}
 
         {hotelInfo.heroStyle === 'carousel' && (
           <div className="absolute inset-0 bg-[#333D29]">
-            {((hotelInfo.heroImages && hotelInfo.heroImages.filter(url => url).length > 0) 
-              ? hotelInfo.heroImages.filter(url => url).slice(0, 5) 
+            {((hotelInfo.heroImages && hotelInfo.heroImages.filter(url => url).length > 0)
+              ? hotelInfo.heroImages.filter(url => url).slice(0, 5)
               : heroSlides
             ).map((slide, idx) => (
-              <img 
+              <img
                 key={idx}
                 src={slide}
                 alt={`Slide ${idx}`}
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-0 ${idx === heroSlideIdx ? '!opacity-60' : ''}`} 
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-0 ${idx === heroSlideIdx ? '!opacity-60' : ''}`}
               />
             ))}
           </div>
@@ -418,11 +417,11 @@ export const OrganicTemplate: React.FC = () => {
 
         {hotelInfo.heroStyle === 'video' && (
           <div className="absolute inset-0 bg-[#333D29]">
-            <video 
-              autoPlay 
-              loop 
-              muted 
-              playsInline 
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
               className="w-full h-full object-cover opacity-55"
               src={hotelInfo.heroVideo || "https://assets.mixkit.co/videos/preview/mixkit-swimming-pool-in-a-resort-40244-large.mp4"}
             />
@@ -437,7 +436,7 @@ export const OrganicTemplate: React.FC = () => {
           <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-[0.25em] text-white/80 block">
             {hotelInfo.tagline || "Discover a natural escape in Poolampatti"}
           </span>
-          <h2 
+          <h2
             className="text-[clamp(2.5rem,6.5vw,5.5rem)] font-light text-white tracking-[-0.02em] leading-[0.95] uppercase font-serif"
             style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
           >
@@ -481,12 +480,11 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     tagline: (
-      <section 
+      <section
         key="tagline"
         onClick={(e) => triggerEdit('property', e)}
-        className={`bg-[#E8E2D6] py-3 px-6 relative flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`bg-[#E8E2D6] py-3 px-6 relative flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-1/2 -translate-y-1/2 right-4 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-40 border border-blue-400">
@@ -507,13 +505,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     about: (
-      <section 
+      <section
         key="about"
         id="about"
         onClick={(e) => triggerEdit('description', e)}
-        className={`py-14 px-6 max-w-2xl mx-auto text-center space-y-5 relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-14 px-6 max-w-2xl mx-auto text-center space-y-5 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400">
@@ -521,9 +518,9 @@ export const OrganicTemplate: React.FC = () => {
           </span>
         )}
         <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Our Philosophy)</span>
-        <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+        {/* <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
           Earth, Water, and Calm
-        </h3>
+        </h3> */}
         <p className="text-[0.875rem] leading-[1.75] text-zinc-500 font-light max-w-lg mx-auto">
           {hotelInfo.shortDescription || hotelInfo.description}
         </p>
@@ -539,13 +536,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     amenities: (
-      <section 
+      <section
         key="amenities"
         id="amenities"
         onClick={(e) => triggerEdit('amenities', e)}
-        className={`py-12 px-6 bg-[#EBF0EC] border-y border-[#D8E2DC] relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 bg-[#EBF0EC] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400">
@@ -557,12 +553,12 @@ export const OrganicTemplate: React.FC = () => {
             <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Natural Luxuries)</span>
             <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Property Amenities</h3>
           </div>
-          
+
           {/* 2x5 grid desktop: 10 items always */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {(hotelInfo.generalAmenities || []).slice(0, 10).map((amenity, idx) => (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="bg-[#FAF6F0] border border-[#D8E2DC] p-3.5 text-center rounded-xl hover:shadow-sm hover:border-[#8FA89B]/50 transition duration-300 flex flex-col items-center justify-center gap-2"
               >
                 {getAmenityIcon(amenity)}
@@ -586,13 +582,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     events: (
-      <section 
+      <section
         key="events"
         id="events"
         onClick={(e) => triggerEdit('events-admin', e)}
-        className={`py-12 px-6 relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400">
@@ -605,7 +600,7 @@ export const OrganicTemplate: React.FC = () => {
             <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Resort Packages & Scheduled Activities</h3>
             <p className="text-[11px] text-zinc-400 lowercase tracking-wider font-light">Book individually — no room reservation needed</p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {guestEvents.map((evt) => (
               <div key={evt.id} className="bg-white border border-[#D8E2DC] rounded-2xl overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] hover:border-[#8FA89B]/60 transition duration-300 ease-out text-left cursor-pointer">
@@ -616,13 +611,13 @@ export const OrganicTemplate: React.FC = () => {
                     {evt.category}
                   </span>
                 </div>
-                
+
                 {/* Info & Booking button */}
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-2">
                     <h4 className="text-4xs font-bold text-[#3D405B] uppercase leading-tight">{evt.title}</h4>
                     <p className="text-5xs text-zinc-550 leading-relaxed font-sans">{evt.description}</p>
-                    
+
                     {/* Date range + Time + Price */}
                     <div className="pt-2 border-t border-zinc-100 space-y-1.5 text-[8px] font-extrabold uppercase text-[#556B2F] font-sans">
                       <div className="flex items-center gap-1.5">
@@ -659,13 +654,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     rooms: (
-      <section 
+      <section
         key="rooms"
         id="rooms"
         onClick={(e) => triggerEdit('rooms', e)}
-        className={`py-12 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400">
@@ -679,13 +673,13 @@ export const OrganicTemplate: React.FC = () => {
               <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Our Sanctuary Spaces</h3>
             </div>
             <div className="flex gap-2.5 mt-4 sm:mt-0">
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); scrollRooms('left'); }}
                 className="w-8 h-8 rounded-full border border-[#8FA89B] flex items-center justify-center text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white transition cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); scrollRooms('right'); }}
                 className="w-8 h-8 rounded-full border border-[#8FA89B] flex items-center justify-center text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white transition cursor-pointer"
               >
@@ -694,23 +688,23 @@ export const OrganicTemplate: React.FC = () => {
             </div>
           </div>
 
-          <div 
+          <div
             ref={roomScrollRef}
             className="flex gap-4 overflow-x-auto pb-4 scrollbar-none snap-x snap-mandatory"
           >
             {rooms.map((room) => {
               return (
-                <div 
+                <div
                   key={room.id}
                   className="min-w-[280px] max-w-[280px] bg-[#FAF6F0] border border-[#D8E2DC] rounded-2xl flex-col flex overflow-hidden snap-start group/card hover:border-[#8FA89B]/65 hover:scale-[1.01] active:scale-[0.99] transition duration-300 relative cursor-pointer text-left"
                 >
                   <div className="aspect-4/3 bg-zinc-100 overflow-hidden relative shrink-0">
-                    <img 
-                      src={room.photos[0] || "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=600"} 
-                      alt={room.name} 
-                      className="w-full h-full object-cover group-hover/card:scale-103 transition duration-500" 
+                    <img
+                      src={room.photos[0] || "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=600"}
+                      alt={room.name}
+                      className="w-full h-full object-cover group-hover/card:scale-103 transition duration-500"
                     />
-                    
+
                     {room.totalInventory <= 2 && (
                       <div className="absolute top-3 left-3 bg-[#E07A5F] text-white text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider shadow-sm z-10 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
@@ -726,7 +720,7 @@ export const OrganicTemplate: React.FC = () => {
                   <div className="p-4 space-y-4 flex-1 flex flex-col justify-between font-sans">
                     <div className="space-y-3">
                       <h4 className="font-extrabold text-[#3D405B] text-xs uppercase tracking-wider">{room.name}</h4>
-                      
+
                       <div className="flex flex-col gap-1.5 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
                         <div className="flex justify-between items-center border-b border-[#D8E2DC]/40 pb-1">
                           <span>Size:</span>
@@ -742,8 +736,8 @@ export const OrganicTemplate: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    
-                    <button 
+
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedRoomId(room.id);
@@ -763,13 +757,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     reviews: (
-      <section 
+      <section
         key="reviews"
         id="reviews"
         onClick={(e) => triggerEdit('testimonials-admin', e)}
-        className={`py-12 px-6 relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -780,10 +773,10 @@ export const OrganicTemplate: React.FC = () => {
           <div className="text-center space-y-1.5">
             <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Guest Feedback)</span>
             <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Guest Reviews</h3>
-            <span className="text-[10px] text-[#8FA89B] font-medium block tracking-[0.1em]">Verified reviews · {testimonials.length > 0 ? (testimonials.reduce((s,t)=>s+t.rating,0)/testimonials.length).toFixed(1) : '5.0'} / 5.0</span>
+            <span className="text-[10px] text-[#8FA89B] font-medium block tracking-[0.1em]">Verified reviews · {testimonials.length > 0 ? (testimonials.reduce((s, t) => s + t.rating, 0) / testimonials.length).toFixed(1) : '5.0'} / 5.0</span>
           </div>
 
-          <StaggerTestimonials 
+          <StaggerTestimonials
             customTestimonials={testimonials}
             companyName={hotelInfo.name}
           />
@@ -796,9 +789,9 @@ export const OrganicTemplate: React.FC = () => {
           <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Portrait Diary)</span>
           <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Natural Vignettes</h3>
         </div>
-        <BentoGallery 
-          images={hotelInfo.heroImages} 
-          scrollContainerRef={scrollContainerRef} 
+        <BentoGallery
+          images={hotelInfo.heroImages}
+          scrollContainerRef={scrollContainerRef}
           onImageClick={(idx, imgs) => {
             setLightboxImages(imgs);
             setGalleryLightboxIdx(idx);
@@ -807,12 +800,11 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     policies: (
-      <section 
+      <section
         key="policies"
         onClick={(e) => triggerEdit('policies-admin', e)}
-        className={`py-12 px-6 bg-[#EBF0EC] border-y border-[#D8E2DC] relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 bg-[#EBF0EC] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -854,7 +846,7 @@ export const OrganicTemplate: React.FC = () => {
             </p>
 
             <form onSubmit={handleContactSubmit} className="space-y-2">
-              <textarea 
+              <textarea
                 required
                 value={contactMessage}
                 onChange={(e) => setContactMessage(e.target.value)}
@@ -862,7 +854,7 @@ export const OrganicTemplate: React.FC = () => {
                 rows={2}
                 className="w-full bg-[#FAF6F0] border border-[#D8E2DC] focus:border-[#8FA89B] text-3xs p-2 rounded-xl outline-hidden"
               />
-              <button 
+              <button
                 type="submit"
                 className="bg-[#8FA89B] hover:bg-[#7D9387] text-white font-extrabold text-[9px] uppercase tracking-wider px-3.5 py-1.8 w-full rounded-lg transition cursor-pointer"
               >
@@ -878,12 +870,11 @@ export const OrganicTemplate: React.FC = () => {
     ),
     addons: (
       addons.length > 0 ? (
-        <section 
+        <section
           key="addons"
           onClick={(e) => triggerEdit('addons', e)}
-          className={`py-12 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${
-            canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-          }`}
+          className={`py-12 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+            }`}
         >
           {canvasMode === 'editor' && (
             <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -895,7 +886,7 @@ export const OrganicTemplate: React.FC = () => {
               <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Experiences)</span>
               <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Eco-Upsells & Local Experiences</h3>
             </div>
-            
+
             {/* Visual Add-ons Redesigned cards (matching image 2) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left font-sans">
               {addons.map((addon) => {
@@ -904,10 +895,10 @@ export const OrganicTemplate: React.FC = () => {
                   <div key={addon.id} className="bg-white border border-[#D8E2DC] rounded-2xl overflow-hidden flex shadow-xs hover:border-[#8FA89B]/65 hover:scale-[1.01] active:scale-[0.99] transition duration-300 ease-out cursor-pointer">
                     {/* Left: image */}
                     <div className="w-24 h-24 shrink-0 bg-zinc-50 border-r border-[#D8E2DC]">
-                      <img 
-                        src={addon.image || "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=300"} 
-                        alt={addon.name} 
-                        className="w-full h-full object-cover" 
+                      <img
+                        src={addon.image || "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=300"}
+                        alt={addon.name}
+                        className="w-full h-full object-cover"
                       />
                     </div>
                     {/* Right: info */}
@@ -916,11 +907,11 @@ export const OrganicTemplate: React.FC = () => {
                         <h4 className="font-bold text-[#3D405B] uppercase text-4xs tracking-wider line-clamp-1">{addon.name}</h4>
                         <p className="text-[10px] text-zinc-500 font-sans mt-0.5 line-clamp-2 leading-snug">{addon.description}</p>
                       </div>
-                      
+
                       {/* Price & Quantity Selector */}
                       <div className="flex items-center justify-between pt-2">
                         <span className="text-4xs font-extrabold text-[#E07A5F]">${addon.price}</span>
-                        
+
                         {/* Quantity Pill Selector */}
                         <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 text-4xs font-bold">
                           <button
@@ -950,13 +941,12 @@ export const OrganicTemplate: React.FC = () => {
       ) : null
     ),
     faqs: (
-      <section 
+      <section
         key="faqs"
         id="faqs"
         onClick={(e) => triggerEdit('faqs-admin', e)}
-        className={`py-12 px-6 relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -973,8 +963,8 @@ export const OrganicTemplate: React.FC = () => {
             {faqs.map((faq) => {
               const isOpen = openFaqId === faq.id;
               return (
-                <div 
-                  key={faq.id} 
+                <div
+                  key={faq.id}
                   className="bg-[#FAF6F0] border border-[#D8E2DC] rounded-xl overflow-hidden"
                 >
                   <button
@@ -991,7 +981,7 @@ export const OrganicTemplate: React.FC = () => {
                     </span>
                   </button>
                   {isOpen && (
-                    <div 
+                    <div
                       className="px-4 pb-3.5 text-2xs text-zinc-500 leading-relaxed font-sans border-t border-[#D8E2DC]/50 pt-2.5"
                     >
                       {faq.answer}
@@ -1005,13 +995,12 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     location: (
-      <section 
+      <section
         key="location"
         id="location"
         onClick={(e) => triggerEdit('location-map', e)}
-        className={`py-12 px-6 relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-12 px-6 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -1026,7 +1015,7 @@ export const OrganicTemplate: React.FC = () => {
               {hotelInfo.address}
             </p>
             <div className="pt-1.5">
-              <a 
+              <a
                 href={`https://maps.google.com/?q=${hotelInfo.latitude},${hotelInfo.longitude}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1063,7 +1052,7 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     instagram: (
-      <section 
+      <section
         key="instagram"
         onClick={(e) => {
           if (!hotelInfo.instagramHandle) {
@@ -1072,9 +1061,8 @@ export const OrganicTemplate: React.FC = () => {
             window.open(`https://instagram.com/${hotelInfo.instagramHandle}`, '_blank');
           }
         }}
-        className={`py-8 px-4 bg-[#EBF0EC] border-t border-[#D8E2DC] relative group transition cursor-pointer ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`py-8 px-4 bg-[#EBF0EC] border-t border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 left-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -1085,8 +1073,8 @@ export const OrganicTemplate: React.FC = () => {
           <div className="flex items-center gap-2 text-[#556B2F] text-5xs tracking-widest font-bold uppercase justify-center font-sans">
             <InstagramIcon className="w-3.5 h-3.5 text-[#E07A5F]" />
             <span>
-              {hotelInfo.instagramHandle 
-                ? `Follow Our Natural Escape @${hotelInfo.instagramHandle}` 
+              {hotelInfo.instagramHandle
+                ? `Follow Our Natural Escape @${hotelInfo.instagramHandle}`
                 : "Connect Instagram in Contact settings to show feed"}
             </span>
           </div>
@@ -1114,240 +1102,232 @@ export const OrganicTemplate: React.FC = () => {
   const activeCustomPage = customPages.find(p => `/pages/${p.slug}` === previewPath);
 
   return (
-    <div 
+    <div
       ref={scrollContainerRef}
       className="flex-1 overflow-y-auto bg-[#FAF6F0] text-[#333D29] relative"
       style={{ fontFamily: "'Lexend', 'Plus Jakarta Sans', sans-serif" }}
     >
       <div className="bg-[#FAF6F0] relative z-10 shadow-2xl">
-      {/* 1. HEADER (LOGO + MENU BAR) — TRANS-OVERLAY */}
-      <nav className={`px-5 lg:px-8 py-3.5 flex items-center justify-between transition-all duration-500 ease-in-out z-30 sticky top-0 left-0 right-0 w-full mb-[-58px] ${
-        isScrolled 
-          ? 'bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]' 
-          : 'bg-transparent border-b border-white/10'
-      }`}>
+        {/* 1. HEADER (LOGO + MENU BAR) — TRANS-OVERLAY */}
+        <nav className={`px-5 lg:px-8 py-3.5 flex items-center justify-between transition-all duration-500 ease-in-out z-30 sticky top-0 left-0 right-0 w-full mb-[-58px] ${isScrolled
+            ? 'bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]'
+            : 'bg-transparent border-b border-white/10'
+          }`}>
 
-        {/* Logo */}
-        <div 
-          onClick={(e) => triggerEdit('property', e)}
-          className={`flex items-center gap-2 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-1 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-4' : ''}`}
-        >
-          {canvasMode === 'editor' && (
-            <span className="absolute -top-7 -left-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-40 opacity-0 group-hover:opacity-100 transition whitespace-nowrap font-sans font-normal">
-              ✏️ Edit Logo
-            </span>
-          )}
-          {hotelInfo.logoUrl ? (
-            <img src={hotelInfo.logoUrl} alt={hotelInfo.name} className="h-8 max-w-[140px] object-contain" />
-          ) : (
-            <h1 
-              onClick={() => setPreviewPath('/')} 
-              className={`font-semibold text-xs tracking-[0.2em] uppercase transition-colors duration-500`}
-              style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif", color: isScrolled ? '#3D405B' : '#ffffff' }}
-            >
-              {hotelInfo.name}
-            </h1>
-          )}
-        </div>
-
-        {/* Desktop Nav — The Bend Club style: uppercase tight tracking with '+' separators */}
-        <div className={`hidden lg:flex items-center gap-1.5 text-[9px] uppercase tracking-[0.22em] font-medium transition-colors duration-500 ${
-          isScrolled ? 'text-[#556B2F]' : 'text-white/90'
-        }`}>
-          {activeMenuItems.map((id, idx) => {
-            const item = menuMap[id];
-            if (!item) return null;
-            return (
-              <React.Fragment key={id}>
-                <a 
-                  href={item.href} 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setPreviewPath('/');
-                    setTimeout(() => {
-                      const target = document.querySelector(item.href);
-                      if (target) target.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                    isScrolled 
-                      ? 'hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50' 
-                      : 'hover:text-white opacity-85 hover:bg-white/10'
-                  }`}
-                >
-                  {item.label}
-                </a>
-                {idx < activeMenuItems.length - 1 && (
-                  <span className={`text-[8px] select-none opacity-40 ${
-                    isScrolled ? 'text-[#8FA89B]' : 'text-white'
-                  }`}>+</span>
-                )}
-              </React.Fragment>
-            );
-          })}
-          {customPages.filter(p => p.active).map(page => (
-            <button
-              key={page.id}
-              onClick={() => setPreviewPath(`/pages/${page.slug}`)}
-              className={`px-3 py-1.5 rounded-lg bg-transparent border-none cursor-pointer font-medium text-[9px] uppercase tracking-[0.22em] transition-all duration-200 ${
-                isScrolled 
-                  ? 'text-[#556B2F] hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50' 
-                  : 'text-white/80 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              {page.title}
-            </button>
-          ))}
-        </div>
-
-        {/* Right: CTA + Hamburger */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              setSelectedRoomId(rooms[0]?.id || '');
-              setIsBookingOpen(true);
-              setBookingStep('details');
-            }}
-            className={`font-bold text-[9px] uppercase tracking-[0.2em] px-5 py-2 rounded-full transition-all duration-300 cursor-pointer whitespace-nowrap ${
-              isScrolled 
-                ? 'bg-[#8FA89B] hover:bg-[#7D9387] text-white shadow-sm' 
-                : 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/40'
-            }`}
+          {/* Logo */}
+          <div
+            onClick={(e) => triggerEdit('property', e)}
+            className={`flex items-center gap-2 relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-1 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-4' : ''}`}
           >
-            Book Now
-          </button>
-
-          {/* Mobile Hamburger Toggle */}
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            aria-label="Open navigation menu"
-            className={`lg:hidden p-2 rounded-lg transition-all duration-300 cursor-pointer ${
-              isScrolled 
-                ? 'border border-[#D8E2DC] text-[#556B2F] hover:bg-[#E8E2D6]' 
-                : 'border border-white/25 text-white hover:bg-white/10'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <line x1="3" x2="21" y1="6" y2="6" />
-              <line x1="3" x2="21" y1="12" y2="12" />
-              <line x1="3" x2="21" y1="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-      </nav>
-
-      {/* Hamburger overlay drawer — glassmorphic panel */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          {/* Blurred backdrop — tap to close */}
-          <div 
-            className="absolute inset-0 bg-[#1C2416]/65 backdrop-blur-sm animate-in fade-in duration-200" 
-            onClick={() => setIsMobileMenuOpen(false)} 
-          />
-          {/* Slide-in panel */}
-          <div className="absolute right-0 top-0 h-full w-72 bg-[#FAF6F0]/97 backdrop-blur-2xl border-l border-[#D8E2DC]/60 shadow-[−20px_0_60px_rgba(0,0,0,0.15)] flex flex-col animate-in slide-in-from-right duration-300">
-
-            {/* Panel Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#D8E2DC]/70">
-              <span 
-                className="font-medium text-xs uppercase tracking-[0.22em] text-[#3D405B]"
-                style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
+            {canvasMode === 'editor' && (
+              <span className="absolute -top-7 -left-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-40 opacity-0 group-hover:opacity-100 transition whitespace-nowrap font-sans font-normal">
+                ✏️ Edit Logo
+              </span>
+            )}
+            {hotelInfo.logoUrl ? (
+              <img src={hotelInfo.logoUrl} alt={hotelInfo.name} className="h-8 max-w-[140px] object-contain" />
+            ) : (
+              <h1
+                onClick={() => setPreviewPath('/')}
+                className={`font-semibold text-xs tracking-[0.2em] uppercase transition-colors duration-500`}
+                style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif", color: isScrolled ? '#3D405B' : '#ffffff' }}
               >
                 {hotelInfo.name}
-              </span>
-              <button 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#556B2F] hover:bg-[#E8E2D6] transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+              </h1>
+            )}
+          </div>
 
-            {/* Nav links — styled like The Bend Club with generous padding */}
-            <div className="flex-1 py-4 px-3 overflow-y-auto">
-              {activeMenuItems.map(id => {
-                const item = menuMap[id];
-                if (!item) return null;
-                return (
+          {/* Desktop Nav — The Bend Club style: uppercase tight tracking with '+' separators */}
+          <div className={`hidden lg:flex items-center gap-1.5 text-[9px] uppercase tracking-[0.22em] font-medium transition-colors duration-500 ${isScrolled ? 'text-[#556B2F]' : 'text-white/90'
+            }`}>
+            {activeMenuItems.map((id, idx) => {
+              const item = menuMap[id];
+              if (!item) return null;
+              return (
+                <React.Fragment key={id}>
                   <a
-                    key={id}
                     href={item.href}
                     onClick={(e) => {
                       e.preventDefault();
-                      setIsMobileMenuOpen(false);
                       setPreviewPath('/');
                       setTimeout(() => {
                         const target = document.querySelector(item.href);
                         if (target) target.scrollIntoView({ behavior: 'smooth' });
-                      }, 150);
+                      }, 100);
                     }}
-                    className="flex items-center justify-between px-3 py-3.5 rounded-xl text-[10px] uppercase tracking-[0.22em] font-medium text-[#333D29] hover:text-[#E07A5F] hover:bg-[#E8E2D6]/60 transition-all duration-200 cursor-pointer block"
+                    className={`px-3 py-1.5 rounded-lg transition-all duration-200 ${isScrolled
+                        ? 'hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
+                        : 'hover:text-white opacity-85 hover:bg-white/10'
+                      }`}
                   >
-                    <span>{item.label}</span>
-                    <ChevronRight className="w-3 h-3 opacity-30" />
+                    {item.label}
                   </a>
-                );
-              })}
-              {customPages.filter(p => p.active).map(page => (
+                  {idx < activeMenuItems.length - 1 && (
+                    <span className={`text-[8px] select-none opacity-40 ${isScrolled ? 'text-[#8FA89B]' : 'text-white'
+                      }`}>+</span>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {customPages.filter(p => p.active).map(page => (
+              <button
+                key={page.id}
+                onClick={() => setPreviewPath(`/pages/${page.slug}`)}
+                className={`px-3 py-1.5 rounded-lg bg-transparent border-none cursor-pointer font-medium text-[9px] uppercase tracking-[0.22em] transition-all duration-200 ${isScrolled
+                    ? 'text-[#556B2F] hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                  }`}
+              >
+                {page.title}
+              </button>
+            ))}
+          </div>
+
+          {/* Right: CTA + Hamburger */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setSelectedRoomId(rooms[0]?.id || '');
+                setIsBookingOpen(true);
+                setBookingStep('details');
+              }}
+              className={`font-bold text-[9px] uppercase tracking-[0.2em] px-5 py-2 rounded-full transition-all duration-300 cursor-pointer whitespace-nowrap ${isScrolled
+                  ? 'bg-[#8FA89B] hover:bg-[#7D9387] text-white shadow-sm'
+                  : 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/40'
+                }`}
+            >
+              Book Now
+            </button>
+
+            {/* Mobile Hamburger Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open navigation menu"
+              className={`lg:hidden p-2 rounded-lg transition-all duration-300 cursor-pointer ${isScrolled
+                  ? 'border border-[#D8E2DC] text-[#556B2F] hover:bg-[#E8E2D6]'
+                  : 'border border-white/25 text-white hover:bg-white/10'
+                }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <line x1="3" x2="21" y1="6" y2="6" />
+                <line x1="3" x2="21" y1="12" y2="12" />
+                <line x1="3" x2="21" y1="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </nav>
+
+        {/* Hamburger overlay drawer — glassmorphic panel */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            {/* Blurred backdrop — tap to close */}
+            <div
+              className="absolute inset-0 bg-[#1C2416]/65 backdrop-blur-sm animate-in fade-in duration-200"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            {/* Slide-in panel */}
+            <div className="absolute right-0 top-0 h-full w-72 bg-[#FAF6F0]/97 backdrop-blur-2xl border-l border-[#D8E2DC]/60 shadow-[−20px_0_60px_rgba(0,0,0,0.15)] flex flex-col animate-in slide-in-from-right duration-300">
+
+              {/* Panel Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-[#D8E2DC]/70">
+                <span
+                  className="font-medium text-xs uppercase tracking-[0.22em] text-[#3D405B]"
+                  style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
+                >
+                  {hotelInfo.name}
+                </span>
                 <button
-                  key={page.id}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[#556B2F] hover:bg-[#E8E2D6] transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Nav links — styled like The Bend Club with generous padding */}
+              <div className="flex-1 py-4 px-3 overflow-y-auto">
+                {activeMenuItems.map(id => {
+                  const item = menuMap[id];
+                  if (!item) return null;
+                  return (
+                    <a
+                      key={id}
+                      href={item.href}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setIsMobileMenuOpen(false);
+                        setPreviewPath('/');
+                        setTimeout(() => {
+                          const target = document.querySelector(item.href);
+                          if (target) target.scrollIntoView({ behavior: 'smooth' });
+                        }, 150);
+                      }}
+                      className="flex items-center justify-between px-3 py-3.5 rounded-xl text-[10px] uppercase tracking-[0.22em] font-medium text-[#333D29] hover:text-[#E07A5F] hover:bg-[#E8E2D6]/60 transition-all duration-200 cursor-pointer block"
+                    >
+                      <span>{item.label}</span>
+                      <ChevronRight className="w-3 h-3 opacity-30" />
+                    </a>
+                  );
+                })}
+                {customPages.filter(p => p.active).map(page => (
+                  <button
+                    key={page.id}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setPreviewPath(`/pages/${page.slug}`);
+                    }}
+                    className="flex items-center justify-between w-full px-3 py-3.5 rounded-xl text-[10px] uppercase tracking-[0.22em] font-medium text-[#333D29] hover:text-[#E07A5F] hover:bg-[#E8E2D6]/60 transition-all duration-200 cursor-pointer bg-transparent border-none"
+                  >
+                    <span>{page.title}</span>
+                    <ChevronRight className="w-3 h-3 opacity-30" />
+                  </button>
+                ))}
+              </div>
+
+              {/* Book CTA at bottom */}
+              <div className="p-5 border-t border-[#D8E2DC]/70">
+                <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
-                    setPreviewPath(`/pages/${page.slug}`);
+                    setSelectedRoomId(rooms[0]?.id || '');
+                    setIsBookingOpen(true);
+                    setBookingStep('details');
                   }}
-                  className="flex items-center justify-between w-full px-3 py-3.5 rounded-xl text-[10px] uppercase tracking-[0.22em] font-medium text-[#333D29] hover:text-[#E07A5F] hover:bg-[#E8E2D6]/60 transition-all duration-200 cursor-pointer bg-transparent border-none"
+                  className="bg-[#8FA89B] hover:bg-[#7D9387] active:scale-[0.98] text-white font-semibold text-[10px] uppercase tracking-[0.22em] py-3 rounded-full transition-all duration-200 w-full shadow-sm text-center block cursor-pointer"
                 >
-                  <span>{page.title}</span>
-                  <ChevronRight className="w-3 h-3 opacity-30" />
+                  Book Your Stay
                 </button>
-              ))}
-            </div>
-
-            {/* Book CTA at bottom */}
-            <div className="p-5 border-t border-[#D8E2DC]/70">
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  setSelectedRoomId(rooms[0]?.id || '');
-                  setIsBookingOpen(true);
-                  setBookingStep('details');
-                }}
-                className="bg-[#8FA89B] hover:bg-[#7D9387] active:scale-[0.98] text-white font-semibold text-[10px] uppercase tracking-[0.22em] py-3 rounded-full transition-all duration-200 w-full shadow-sm text-center block cursor-pointer"
-              >
-                Book Your Stay
-              </button>
-              <p className="text-center text-[9px] text-zinc-400 mt-3 tracking-wider uppercase">Check availability online</p>
+                <p className="text-center text-[9px] text-zinc-400 mt-3 tracking-wider uppercase">Check availability online</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Conditional Path Router Content Switch */}
-      {previewPath === '/' ? (
-        // Homepage Layout sections loop
-        sectionOrder
-          .filter(id => !disabledSections.includes(id))
-          .map(id => sectionComponents[id])
-      ) : activeCustomPage ? (
-        // Individual preset layout custom page renderer
-        <CustomPageRenderer page={activeCustomPage} />
-      ) : (
-        <div className="py-24 text-center space-y-4">
-          <h2 className="text-lg font-serif text-[#3D405B] uppercase font-bold">404: Page Not Found</h2>
-          <button onClick={() => setPreviewPath('/')} className="bg-[#8FA89B] text-white font-bold text-xs px-5 py-2 rounded-full uppercase tracking-wider">
-            Back to Home
-          </button>
-        </div>
-      )}
+        {/* Conditional Path Router Content Switch */}
+        {previewPath === '/' ? (
+          // Homepage Layout sections loop
+          sectionOrder
+            .filter(id => !disabledSections.includes(id))
+            .map(id => sectionComponents[id])
+        ) : activeCustomPage ? (
+          // Individual preset layout custom page renderer
+          <CustomPageRenderer page={activeCustomPage} />
+        ) : (
+          <div className="py-24 text-center space-y-4">
+            <h2 className="text-lg font-serif text-[#3D405B] uppercase font-bold">404: Page Not Found</h2>
+            <button onClick={() => setPreviewPath('/')} className="bg-[#8FA89B] text-white font-bold text-xs px-5 py-2 rounded-full uppercase tracking-wider">
+              Back to Home
+            </button>
+          </div>
+        )}
 
       </div>
 
       {/* 14. FOOTER — Creative Redesign WITH CURTAIN REVEAL */}
-      <footer 
+      <footer
         onClick={(e) => triggerEdit('contact', e)}
-        className={`bg-[#1C2416] text-[#D8E2DC] overflow-hidden group transition cursor-pointer sticky bottom-0 z-0 ${
-          canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
-        }`}
+        className={`bg-[#1C2416] text-[#D8E2DC] overflow-hidden group transition cursor-pointer sticky bottom-0 z-0 ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+          }`}
       >
         {canvasMode === 'editor' && (
           <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
@@ -1365,7 +1345,7 @@ export const OrganicTemplate: React.FC = () => {
             {hotelInfo.logoUrl ? (
               <img src={hotelInfo.logoUrl} alt={hotelInfo.name} className="h-10 max-w-[160px] object-contain brightness-0 invert" />
             ) : (
-              <h4 
+              <h4
                 className="text-white font-light text-xl tracking-[0.12em] uppercase"
                 style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
               >
@@ -1468,7 +1448,7 @@ export const OrganicTemplate: React.FC = () => {
               </button>
             </div>
             <div className="p-6">
-              <div 
+              <div
                 className="text-[0.9rem] leading-[1.8] text-zinc-655 font-light text-left [&_p]:mb-3.5 [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:bg-zinc-150 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:font-mono [&_a]:text-blue-600 [&_a]:underline whitespace-normal"
                 dangerouslySetInnerHTML={{ __html: hotelInfo.detailedDescription || '' }}
               />
@@ -1580,7 +1560,7 @@ export const OrganicTemplate: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left text-zinc-700">
               {bookingStep === 'details' ? (
                 <form onSubmit={handleCreateBooking} className="space-y-4 text-xs">
-                  
+
                   {/* dates selected display */}
                   <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-3xs text-[#333D29] font-bold tracking-wider uppercase">
                     <div>
@@ -1664,7 +1644,7 @@ export const OrganicTemplate: React.FC = () => {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">+${addon.price}</span>
-                                
+
                                 {/* Quantity selector inside checkout */}
                                 <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 text-[10px] font-bold">
                                   <button
@@ -1827,7 +1807,7 @@ export const OrganicTemplate: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left text-zinc-700">
               {eventBookingStep === 'details' ? (
                 <form onSubmit={handleCreateEventBooking} className="space-y-4 text-xs font-sans">
-                  
+
                   {/* Event Detail Summary Card */}
                   <div className="p-4 bg-white border border-[#D8E2DC] rounded-2xl space-y-2 relative">
                     <span className="bg-[#8FA89B]/10 text-[#8FA89B] border border-[#8FA89B]/25 text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider">
@@ -1835,7 +1815,7 @@ export const OrganicTemplate: React.FC = () => {
                     </span>
                     <h4 className="font-bold text-[#3D405B] text-xs uppercase leading-tight pt-1">{selectedEvent.title}</h4>
                     <p className="text-[10px] text-zinc-500 font-sans leading-relaxed">{selectedEvent.description}</p>
-                    
+
                     <div className="pt-2.5 border-t border-zinc-100 flex flex-wrap gap-x-4 gap-y-1.5 text-[9px] font-extrabold uppercase text-[#556B2F]">
                       <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-zinc-400" /> {selectedEvent.time}</span>
                       <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-zinc-400" /> {selectedEvent.date}</span>

@@ -66,6 +66,14 @@ export interface ManagedPhoto {
   isHero: boolean;   // auto-populates heroImages when true
 }
 
+// Managed video in media library
+export interface ManagedVideo {
+  id: string;
+  url: string;
+  tags: string[];    // e.g. ['pool', 'highlights']
+  isHero: boolean;   // auto-populates heroVideo when true
+}
+
 
 export interface BedConfig {
   single?: number;
@@ -308,6 +316,11 @@ interface HotelContextType {
   addManagedPhoto: (photo: Omit<ManagedPhoto, 'id'>) => void;
   updateManagedPhoto: (id: string, photo: Partial<ManagedPhoto>) => void;
   deleteManagedPhoto: (id: string) => void;
+  // Managed Videos
+  managedVideos: ManagedVideo[];
+  addManagedVideo: (video: Omit<ManagedVideo, 'id'>) => void;
+  updateManagedVideo: (id: string, video: Partial<ManagedVideo>) => void;
+  deleteManagedVideo: (id: string) => void;
 }
 
 const HotelContext = createContext<HotelContextType | undefined>(undefined);
@@ -647,6 +660,13 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [managedVideos, setManagedVideos] = useState<ManagedVideo[]>(() => {
+    const saved = localStorage.getItem('managedVideos');
+    return saved ? JSON.parse(saved) : [
+      { id: 'vid-1', url: 'https://assets.mixkit.co/videos/preview/mixkit-swimming-pool-in-a-resort-40244-large.mp4', tags: ['pool', 'highlights'], isHero: true }
+    ];
+  });
+
   // Sync to local storage
   useEffect(() => { localStorage.setItem('propertiesList', JSON.stringify(propertiesList)); }, [propertiesList]);
   useEffect(() => { localStorage.setItem('hotelInfo', JSON.stringify(hotelInfo)); }, [hotelInfo]);
@@ -664,6 +684,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => { localStorage.setItem('guestEvents', JSON.stringify(guestEvents)); }, [guestEvents]);
   useEffect(() => { localStorage.setItem('coHosts', JSON.stringify(coHosts)); }, [coHosts]);
   useEffect(() => { localStorage.setItem('managedPhotos', JSON.stringify(managedPhotos)); }, [managedPhotos]);
+  useEffect(() => { localStorage.setItem('managedVideos', JSON.stringify(managedVideos)); }, [managedVideos]);
 
   // Auto-sync hero images from managedPhotos when isHero changes
   useEffect(() => {
@@ -672,6 +693,14 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setHotelInfoState(prev => ({ ...prev, heroImages: heroUrls }));
     }
   }, [managedPhotos]);
+
+  // Auto-sync hero video from managedVideos when isHero changes
+  useEffect(() => {
+    const heroVid = managedVideos.find(v => v.isHero)?.url || '';
+    if (heroVid) {
+      setHotelInfoState(prev => ({ ...prev, heroVideo: heroVid }));
+    }
+  }, [managedVideos]);
 
   useEffect(() => {
     if (selectedTheme === 'THEME: ORGANIC NATURAL') {
@@ -972,6 +1001,17 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       },
       deleteManagedPhoto: (id: string) => {
         setManagedPhotos(prev => prev.filter(p => p.id !== id));
+      },
+      // Managed Videos
+      managedVideos,
+      addManagedVideo: (video: Omit<ManagedVideo, 'id'>) => {
+        setManagedVideos(prev => [...prev, { ...video, id: `video-${Date.now()}` }]);
+      },
+      updateManagedVideo: (id: string, video: Partial<ManagedVideo>) => {
+        setManagedVideos(prev => prev.map(v => v.id === id ? { ...v, ...video } : v));
+      },
+      deleteManagedVideo: (id: string) => {
+        setManagedVideos(prev => prev.filter(v => v.id !== id));
       },
     }}>
       {children}
