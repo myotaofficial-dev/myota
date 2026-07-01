@@ -342,10 +342,12 @@ export const DomainView: React.FC = () => {
 
   // Description
   const [description, setDescription] = useState(hotelInfo.description);
+  const [aboutTitle, setAboutTitle] = useState(hotelInfo.aboutTitle || '');
   const [shortDescription, setShortDescription] = useState(hotelInfo.shortDescription || '');
   const [detailedDescription, setDetailedDescription] = useState(hotelInfo.detailedDescription || '');
 
   // Amenities
+  const [amenitiesTitle, setAmenitiesTitle] = useState(hotelInfo.amenitiesTitle || '');
   const [generalAmenities, setGeneralAmenities] = useState<string[]>(hotelInfo.generalAmenities);
   const [amenitySearch, setAmenitySearch] = useState('');
   const [customAmenityInput, setCustomAmenityInput] = useState('');
@@ -392,6 +394,8 @@ export const DomainView: React.FC = () => {
     setHeroVideo(hotelInfo.heroVideo || '');
     setInstagramHandle(hotelInfo.instagramHandle || '');
     setPrimaryColor(hotelInfo.primaryColor);
+    setAboutTitle(hotelInfo.aboutTitle || '');
+    setAmenitiesTitle(hotelInfo.amenitiesTitle || '');
     setShortDescription(hotelInfo.shortDescription || '');
     setDetailedDescription(hotelInfo.detailedDescription || '');
   }, [hotelInfo]);
@@ -407,7 +411,7 @@ export const DomainView: React.FC = () => {
       name, websiteHeadline, subdomain: subdomain.toLowerCase().replace(/[^a-z0-9-]/g, ''),
       customDomain, starRating, checkInTime, checkOutTime,
       phone, email, address, latitude, longitude,
-      description, shortDescription, detailedDescription, logoUrl, faviconUrl, generalAmenities, tagline,
+      description, aboutTitle, amenitiesTitle, shortDescription, detailedDescription, logoUrl, faviconUrl, generalAmenities, tagline,
       heroStyle, heroImages, heroVideo, instagramHandle, primaryColor, showEvents
     });
     save();
@@ -602,6 +606,13 @@ export const DomainView: React.FC = () => {
         <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Short description displays on homepage; detailed narrative shows in "Read More" popup.</p>
       </div>
       <div className="space-y-1.5 text-left">
+        <label className="text-[11px] font-bold text-zinc-700">About Section Title</label>
+        <p className="text-4xs text-zinc-400 font-medium">The main heading of your introductory/philosophy section on the homepage.</p>
+        <input type="text" value={aboutTitle} onChange={e => setAboutTitle(e.target.value)}
+          placeholder="e.g. Earth, Water, and Calm"
+          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" />
+      </div>
+      <div className="space-y-1.5 text-left">
         <label className="text-[11px] font-bold text-zinc-700">Short Description</label>
         <p className="text-4xs text-zinc-400 font-medium">Shown as the first section of the property page, before the "Read more" button.</p>
         <textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} rows={3}
@@ -632,6 +643,14 @@ export const DomainView: React.FC = () => {
         <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">
           {generalAmenities.length} selected · Search or scroll to add more
         </p>
+      </div>
+
+      <div className="space-y-1.5 text-left">
+        <label className="text-[11px] font-bold text-zinc-700">Amenities Section Title</label>
+        <p className="text-4xs text-zinc-400 font-medium">The main heading of your property amenities section on the homepage.</p>
+        <input type="text" value={amenitiesTitle} onChange={e => setAmenitiesTitle(e.target.value)}
+          placeholder="e.g. Property Amenities"
+          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" />
       </div>
 
       {/* Selected chips */}

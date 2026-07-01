@@ -21,6 +21,15 @@ export interface HotelInfo {
   latitude: number;
   longitude: number;
   description: string;
+  aboutTitle?: string;         // edit title for about/philosophy section
+  amenitiesTitle?: string;
+  eventsTitle?: string;
+  roomsTitle?: string;
+  reviewsTitle?: string;
+  galleryTitle?: string;
+  addonsTitle?: string;
+  faqsTitle?: string;
+  policiesTitle?: string;
   shortDescription?: string;  // short bio / welcome intro
   detailedDescription?: string; // full detailed narrative for Read More popup
   primaryColor: string;
@@ -46,6 +55,32 @@ export interface HotelInfo {
   disabledSections?: string[];
   menuItemsOrder?: string[];
   disabledMenuItems?: string[];
+
+  // Policy & Meal Plans configurations
+  childPolicyEnabled?: boolean;
+  childPolicyMinAge?: number;
+  childPolicyMaxAge?: number;
+  extraAdultRate?: number;
+  extraChildRate?: number;
+  mealPlanCpEnabled?: boolean;
+  mealPlanCpAdultRate?: number;
+  mealPlanCpChildRate?: number;
+  mealPlanMapEnabled?: boolean;
+  mealPlanMapAdultRate?: number;
+  mealPlanMapChildRate?: number;
+  mealPlanApEnabled?: boolean;
+  mealPlanApAdultRate?: number;
+  mealPlanApChildRate?: number;
+  defaultMealPlan?: 'EP' | 'CP';
+  customAmenities?: string[];
+  cancellationPolicyType?: string;
+  cancellationPolicyCustomText?: string;
+  nonRefundableDiscountAmount?: number;
+  cancellationPolicyCustomFullDays?: number;
+  cancellationPolicyCustomHalfDays?: number;
+  customCancellationPolicies?: Array<{ id: string; xx: number; yy: number }>;
+  paymentCollectionType?: 'full' | 'partial';
+  paymentCollectionPercent?: number;
 }
 
 // Co-host with role permissions
@@ -110,6 +145,7 @@ export interface RoomType {
   base_occupancy?: number; // base occupancy (= total bed sleepers)
   inventory_overrides?: Record<string, number>; // { "2025-07-01": 2 } per-date overrides
   rate_overrides?: Record<string, Record<string, number>>; // { "2025-07-01": { "1": 2200 } }
+  cancellation_policy_overrides?: Record<string, string>; // { "2025-07-01": "non_refundable" }
 }
 
 export interface PricingOverride {
@@ -147,6 +183,7 @@ export interface Addon {
   price: number;
   description: string;
   image?: string; // addon photo matching image 2
+  pricingType?: 'per_head' | 'single_event';
 }
 
 export interface Coupon {
@@ -345,6 +382,15 @@ const defaultHotelInfo: HotelInfo = {
   latitude: 11.7878,
   longitude: 78.2040,
   description: "Escape to a world where tranquillity meets luxury at The Grandlake Resorts. Nestled on the scenic hills overlooking Yercaud, we offer custom-curated experiences, an Ayurvedic spa, and fine dining.",
+  aboutTitle: "Earth, Water, and Calm",
+  amenitiesTitle: "Property Amenities",
+  eventsTitle: "Resort Packages & Scheduled Activities",
+  roomsTitle: "Our Sanctuary Spaces",
+  reviewsTitle: "Guest Reviews",
+  galleryTitle: "Natural Vignettes",
+  addonsTitle: "Eco-Upsells & Local Experiences",
+  faqsTitle: "Resort FAQs",
+  policiesTitle: "Resort Guidelines",
   shortDescription: "Escape to a world where tranquillity meets luxury. Nestled on the scenic hills overlooking Yercaud, we offer custom-curated wellness experiences and fine dining.",
   detailedDescription: "Escape to a world where tranquillity meets luxury at The Grandlake Resorts. Nestled on the scenic hills overlooking Yercaud, we offer custom-curated experiences, an Ayurvedic spa, and fine dining. Enjoy organic farm-to-table cuisine prepared by our culinary artists, explore scenic hiking trails directly accessible from the property, or relax by the infinity pool overlooking the valley. Our dedicated caretakers and concierge service ensure your stay is fully personalized.",
   primaryColor: "#0284c7", // Sky Blue Accent matching Pic 2
@@ -371,7 +417,21 @@ const defaultHotelInfo: HotelInfo = {
   sectionOrder: ['hero', 'tagline', 'about', 'amenities', 'events', 'rooms', 'reviews', 'bento-gallery', 'policies', 'addons', 'faqs', 'location', 'instagram'],
   disabledSections: [],
   menuItemsOrder: ['about', 'amenities', 'rooms', 'reviews', 'faqs', 'location'],
-  disabledMenuItems: []
+  disabledMenuItems: [],
+  childPolicyEnabled: true,
+  childPolicyMinAge: 5,
+  childPolicyMaxAge: 12,
+  extraAdultRate: 0,
+  extraChildRate: 0,
+  mealPlanCpEnabled: true,
+  mealPlanCpAdultRate: 300,
+  mealPlanCpChildRate: 250,
+  mealPlanMapEnabled: true,
+  mealPlanMapAdultRate: 1000,
+  mealPlanMapChildRate: 750,
+  mealPlanApEnabled: true,
+  mealPlanApAdultRate: 1500,
+  mealPlanApChildRate: 1250
 };
 
 const defaultRooms: RoomType[] = [
@@ -420,23 +480,26 @@ const defaultAddons: Addon[] = [
   { 
     id: "addon-1", 
     name: "Birthday / Anniversary Decoration", 
-    price: 25.00, 
+    price: 2000, 
     description: "Milestones are meant to be memorable. Celebrate with a romantic setup by the lake.",
-    image: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&q=80&w=600"
+    image: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&q=80&w=600",
+    pricingType: "single_event"
   },
   { 
     id: "addon-2", 
     name: "Candle Light Dinner", 
-    price: 35.00, 
+    price: 3500, 
     description: "An evening of quiet luxury, meant for just the two of you under the canopy stars.",
-    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=600"
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=600",
+    pricingType: "single_event"
   },
-  {
-    id: "addon-3",
-    name: "Buffet Breakfast",
-    price: 15.00,
+  { 
+    id: "addon-3", 
+    name: "Buffet Breakfast", 
+    price: 450, 
     description: "Daily organic buffet breakfast prepared from fresh local farm crops.",
-    image: "https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&q=80&w=600"
+    image: "https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&q=80&w=600",
+    pricingType: "per_head"
   }
 ];
 

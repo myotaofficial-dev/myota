@@ -21,6 +21,7 @@ import { RearrangeView } from './RearrangeView';
 import { EventsAdminView } from './EventsAdminView';
 import { PaymentGatewayView } from './PaymentGatewayView';
 import { CustomPagesView } from './CustomPagesView';
+import { CancellationPoliciesView } from './CancellationPoliciesView';
 
 export const DashboardLayout: React.FC = () => {
   const { 
@@ -66,6 +67,8 @@ export const DashboardLayout: React.FC = () => {
         return <ChannelManagerView />;
       case 'addons':
         return <AddonsView />;
+      case 'cancellation-policies':
+        return <CancellationPoliciesView />;
       case 'coupons':
         return <CouponsView />;
       case 'messages':

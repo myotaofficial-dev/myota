@@ -3,10 +3,12 @@ import { useHotel } from '../../context/HotelContext';
 import { CustomPageRenderer } from './CustomPageRenderer';
 import { BentoGallery } from '../ui/bento-gallery';
 import { StaggerTestimonials } from '@/components/ui/stagger-testimonials';
+import InteractiveSelector from '@/components/ui/interactive-selector';
+import { FullGalleryModal } from '@/components/ui/FullGalleryModal';
 import {
   Star, Phone, Mail,
   MapPin, Check, ChevronRight, X, Sparkles, MessageCircle,
-  Clock, Shield, ArrowLeft, ArrowRight, Calendar
+  Clock, Shield, Calendar
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 
@@ -26,11 +28,73 @@ const InstagramIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+const getRoomPriceForGuests = (room: any, guestCount: number) => {
+  if (!room.price_tiers || Object.keys(room.price_tiers).length === 0) {
+    return room.basePrice;
+  }
+  const key = String(guestCount);
+  if (room.price_tiers[key] !== undefined) {
+    return room.price_tiers[key];
+  }
+  const sortedTiers = Object.entries(room.price_tiers)
+    .map(([g, price]) => ({ guests: Number(g), price: Number(price) }))
+    .sort((a, b) => a.guests - b.guests);
+  
+  if (sortedTiers.length === 0) return room.basePrice;
+
+  let match = sortedTiers[0].price;
+  for (const tier of sortedTiers) {
+    if (guestCount >= tier.guests) {
+      match = tier.price;
+    }
+  }
+  return match;
+};
+
+const distributeGuests = (roomsList: any[], guestCount: number) => {
+  const distribution = roomsList.map(() => 0);
+  if (roomsList.length === 0) return distribution;
+  
+  let remaining = guestCount;
+  
+  // Phase 1: Give 1 guest to each room first (activation)
+  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
+    distribution[i] = 1;
+    remaining--;
+  }
+  
+  // Fill up to base occupancy or capacityAdults
+  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
+    const cap = (roomsList[i].base_occupancy || roomsList[i].capacityAdults || 2);
+    const space = Math.max(0, cap - distribution[i]);
+    const add = Math.min(space, remaining);
+    distribution[i] += add;
+    remaining -= add;
+  }
+  
+  // Fill up to max capacity including children
+  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
+    const cap = (roomsList[i].capacityAdults || 2) + (roomsList[i].capacityChildren || 1);
+    const space = Math.max(0, cap - distribution[i]);
+    const add = Math.min(space, remaining);
+    distribution[i] += add;
+    remaining -= add;
+  }
+  
+  // Fallback: put in first room
+  if (remaining > 0) {
+    distribution[0] += remaining;
+  }
+  
+  return distribution;
+};
+
 export const OrganicTemplate: React.FC = () => {
   const {
     hotelInfo, rooms, pricing, addons, coupons,
     testimonials, faqs, policies, addBooking, canvasMode, setSelectedView, setEditorFocus,
-    guestEvents, customPages, previewPath, setPreviewPath
+    guestEvents, customPages, previewPath, setPreviewPath,
+    managedPhotos
   } = useHotel();
 
   // Navigation state
@@ -42,7 +106,6 @@ export const OrganicTemplate: React.FC = () => {
   const [checkIn, setCheckIn] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [checkOut, setCheckOut] = useState(format(addDays(new Date(), 3), 'yyyy-MM-dd'));
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '');
-  const [guestsCount, setGuestsCount] = useState(2);
   const [promoCode, setPromoCode] = useState('');
 
   // Modal / Drawer state
@@ -75,8 +138,6 @@ export const OrganicTemplate: React.FC = () => {
   // Active Hero Slide Index (For Carousel Hero Style)
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
 
-  // Room Carousel Ref
-  const roomScrollRef = useRef<HTMLDivElement>(null);
 
   // About section popup
   const [isAboutPopupOpen, setIsAboutPopupOpen] = useState(false);
@@ -87,11 +148,30 @@ export const OrganicTemplate: React.FC = () => {
   // Review read-more popup
   const [reviewPopupContent, setReviewPopupContent] = useState<{ author: string; content: string; rating: number; stayDate: string } | null>(null);
 
-  // Gallery lightbox
-  const [galleryLightboxIdx, setGalleryLightboxIdx] = useState<number | null>(null);
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  // Full gallery modal
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [selectedAddonDetail, setSelectedAddonDetail] = useState<any | null>(null);
 
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId);
+  // Dynamic Multi-Room Booking & Occupancy States
+  const [selectedRoomsList, setSelectedRoomsList] = useState<any[]>([]);
+  const [adultsCount, setAdultsCount] = useState(2);
+  const [childrenCount, setChildrenCount] = useState(0);
+  const [childrenAges, setChildrenAges] = useState<number[]>([]);
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
+  const [selectedMealPlan, setSelectedMealPlan] = useState<'ep' | 'cp' | 'map' | 'ap'>('ep');
+
+  useEffect(() => {
+    const def = hotelInfo.defaultMealPlan?.toLowerCase();
+    if (def === 'cp' && hotelInfo.mealPlanCpEnabled !== false) {
+      setSelectedMealPlan('cp');
+    } else {
+      setSelectedMealPlan('ep');
+    }
+  }, [hotelInfo.defaultMealPlan, hotelInfo.mealPlanCpEnabled]);
+
+  const currentSelectedRooms = selectedRoomsList.length > 0 
+    ? selectedRoomsList 
+    : (rooms.find(r => r.id === selectedRoomId) ? [rooms.find(r => r.id === selectedRoomId)!] : []);
   const selectedEvent = guestEvents.find(e => e.id === selectedEventId);
 
   // Auto cycle hero carousel
@@ -113,6 +193,98 @@ export const OrganicTemplate: React.FC = () => {
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
+  const handleChildrenCountChange = (val: number) => {
+    setChildrenCount(val);
+    setChildrenAges(prev => {
+      const next = [...prev];
+      if (val > next.length) {
+        for (let i = next.length; i < val; i++) {
+          next.push(8); // Default child age is 8
+        }
+      }
+      return next.slice(0, val);
+    });
+  };
+
+  const getSmartRecommendations = () => {
+    const totalRequired = adultsCount + childrenCount;
+    const recommendations: Array<{
+      type: 'single' | 'combo';
+      rooms: any[];
+      price: number;
+      label: string;
+      description: string;
+    }> = [];
+
+    // Helper to calculate total price for a room list for the selected dates
+    const getRoomListPrice = (roomList: any[]) => {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const nights = differenceInDays(end, start);
+      if (isNaN(nights) || nights <= 0) return 0;
+
+      // Distribute guests among the rooms
+      const distribution = distributeGuests(roomList, totalRequired);
+
+      let total = 0;
+      roomList.forEach((room, idx) => {
+        const roomPricing = pricing[room.id] || {};
+        const roomGuests = distribution[idx] || 1;
+        const basePrice = getRoomPriceForGuests(room, roomGuests);
+
+        for (let i = 0; i < nights; i++) {
+          const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
+          const override = roomPricing[dateStr];
+          const dayPrice = override && override.price > 0 ? override.price : basePrice;
+          total += dayPrice;
+        }
+      });
+      return total;
+    };
+
+    // 1. Single Room Recommendations
+    rooms.forEach(room => {
+      const capacity = room.capacityAdults || 2;
+      if (capacity >= totalRequired) {
+        recommendations.push({
+          type: 'single',
+          rooms: [room],
+          price: getRoomListPrice([room]),
+          label: room.name,
+          description: `Single Suite: Comfortably fits your group of ${totalRequired} guests.`
+        });
+      }
+    });
+
+    // 2. Combo Options (pairs of rooms)
+    for (let i = 0; i < rooms.length; i++) {
+      for (let j = i; j < rooms.length; j++) {
+        const r1 = rooms[i];
+        const r2 = rooms[j];
+
+        // Same room type requires inventory >= 2
+        if (r1.id === r2.id && (r1.totalInventory || 0) < 2) {
+          continue;
+        }
+
+        const combinedCapacity = (r1.capacityAdults || 2) + (r2.capacityAdults || 2);
+        if (combinedCapacity >= totalRequired) {
+          recommendations.push({
+            type: 'combo',
+            rooms: [r1, r2],
+            price: getRoomListPrice([r1, r2]),
+            label: r1.id === r2.id ? `2x ${r1.name}` : `${r1.name} + ${r2.name}`,
+            description: `Combo option: 2 separate adjacent rooms.`
+          });
+        }
+      }
+    }
+
+    return recommendations.sort((a, b) => a.price - b.price).slice(0, 3);
+  };
+
+  const recommendations = getSmartRecommendations();
+
   // Sync addon quantities to selectedAddons array to maintain pricing calculation compatibility
   useEffect(() => {
     const list: string[] = [];
@@ -126,29 +298,102 @@ export const OrganicTemplate: React.FC = () => {
 
   // Price calculations
   const calculateTotal = () => {
-    if (!selectedRoom) return { subtotal: 0, discount: 0, addonTotal: 0, grandTotal: 0, nights: 0 };
+    if (currentSelectedRooms.length === 0) return { subtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, grandTotal: 0, nights: 0 };
 
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     const nights = differenceInDays(end, start);
 
-    if (isNaN(nights) || nights <= 0) return { subtotal: 0, discount: 0, addonTotal: 0, grandTotal: 0, nights: 0 };
+    if (isNaN(nights) || nights <= 0) return { subtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, grandTotal: 0, nights: 0 };
 
+    // 1. Child age categories based on hotelInfo policies
+    const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+    const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
+    const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+
+    const payingChildren = childrenAges.filter(age => age > minAge && age <= maxAge).length;
+    const adultChildren = childrenAges.filter(age => age > maxAge).length;
+
+    const effectiveAdults = adultsCount + adultChildren;
+    const effectiveChildren = payingChildren;
+    const totalRequiredGuests = effectiveAdults + effectiveChildren;
+
+    // 2. Distribute guests to selected rooms
+    const distribution = distributeGuests(currentSelectedRooms, totalRequiredGuests);
+
+    // 3. Room subtotal (with pricing tiers + calendar overrides)
     let subtotal = 0;
-    const roomPricing = pricing[selectedRoom.id] || {};
+    currentSelectedRooms.forEach((room, idx) => {
+      const roomPricing = pricing[room.id] || {};
+      const roomGuestsCount = distribution[idx] || 1;
+      const basePrice = getRoomPriceForGuests(room, roomGuestsCount);
 
-    for (let i = 0; i < nights; i++) {
-      const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
-      const override = roomPricing[dateStr];
-      const dayPrice = override && override.price > 0 ? override.price : selectedRoom.basePrice;
-      subtotal += dayPrice;
-    }
+      for (let i = 0; i < nights; i++) {
+        const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
+        const override = roomPricing[dateStr];
+        const dayPrice = override && override.price > 0 ? override.price : basePrice;
+        subtotal += dayPrice;
+      }
+    });
 
     let addonTotal = 0;
     selectedAddons.forEach(addonName => {
       const addon = addons.find(a => a.name === addonName);
-      if (addon) addonTotal += addon.price;
+      if (addon) {
+        if (addon.pricingType === 'per_head') {
+          const totalGuests = Math.max(1, adultsCount + childrenCount);
+          addonTotal += addon.price * totalGuests;
+        } else {
+          addonTotal += addon.price;
+        }
+      }
     });
+
+    // 4. Extra bed calculations based on base occupancy
+    let totalBaseOccupancy = 0;
+    currentSelectedRooms.forEach(room => {
+      totalBaseOccupancy += room.base_occupancy ?? room.capacityAdults ?? 2;
+    });
+
+    let extraAdultsCount = 0;
+    let extraChildrenCount = 0;
+
+    if (effectiveAdults > totalBaseOccupancy) {
+      extraAdultsCount = effectiveAdults - totalBaseOccupancy;
+      extraChildrenCount = effectiveChildren;
+    } else {
+      const remBase = totalBaseOccupancy - effectiveAdults;
+      extraChildrenCount = Math.max(0, effectiveChildren - remBase);
+    }
+
+    const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
+    const extraChildRate = hotelInfo.extraChildRate ?? 0;
+    const extraBedTotal = ((extraAdultsCount * extraAdultRate) + (extraChildrenCount * extraChildRate)) * nights;
+
+    // Add extra bed rates to subtotal
+    subtotal += extraBedTotal;
+
+    // 5. Meal Plan calculation
+    let mealPlanTotal = 0;
+    if (selectedMealPlan !== 'ep') {
+      const isCp = selectedMealPlan === 'cp';
+      const isMap = selectedMealPlan === 'map';
+
+      const adultRate = isCp 
+        ? (hotelInfo.mealPlanCpAdultRate ?? 300) 
+        : isMap 
+        ? (hotelInfo.mealPlanMapAdultRate ?? 1000) 
+        : (hotelInfo.mealPlanApAdultRate ?? 1500);
+
+      const childRate = isCp 
+        ? (hotelInfo.mealPlanCpChildRate ?? 250) 
+        : isMap 
+        ? (hotelInfo.mealPlanMapChildRate ?? 750) 
+        : (hotelInfo.mealPlanApChildRate ?? 1250);
+
+      // Meal rates are calculated per guest (adult or paying child) per night
+      mealPlanTotal = ((effectiveAdults * adultRate) + (effectiveChildren * childRate)) * nights;
+    }
 
     let discount = 0;
     if (appliedCouponCode) {
@@ -162,8 +407,8 @@ export const OrganicTemplate: React.FC = () => {
       }
     }
 
-    const grandTotal = Math.max(0, subtotal - discount + addonTotal);
-    return { subtotal, discount, addonTotal, grandTotal, nights };
+    const grandTotal = Math.max(0, subtotal - discount + addonTotal + mealPlanTotal);
+    return { subtotal, discount, addonTotal, mealPlanTotal, grandTotal, nights };
   };
 
   const totals = calculateTotal();
@@ -183,11 +428,11 @@ export const OrganicTemplate: React.FC = () => {
 
   const handleCreateBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestName || !guestEmail || !selectedRoom) return;
+    if (!guestName || !guestEmail || currentSelectedRooms.length === 0) return;
 
     addBooking({
-      roomId: selectedRoom.id,
-      roomName: selectedRoom.name,
+      roomId: currentSelectedRooms.map(r => r.id).join(','),
+      roomName: currentSelectedRooms.map(r => r.name).join(' + '),
       guestName,
       guestEmail,
       guestPhone,
@@ -226,19 +471,6 @@ export const OrganicTemplate: React.FC = () => {
     setEventBookingStep('success');
   };
 
-  const incrementAddon = (name: string) => {
-    setAddonQuantities(prev => ({
-      ...prev,
-      [name]: (prev[name] || 0) + 1
-    }));
-  };
-
-  const decrementAddon = (name: string) => {
-    setAddonQuantities(prev => ({
-      ...prev,
-      [name]: Math.max(0, (prev[name] || 0) - 1)
-    }));
-  };
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,15 +481,6 @@ export const OrganicTemplate: React.FC = () => {
     }, 3000);
   };
 
-  const scrollRooms = (direction: 'left' | 'right') => {
-    if (roomScrollRef.current) {
-      const scrollAmount = 260;
-      roomScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
 
   const triggerEdit = (view: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -517,10 +740,9 @@ export const OrganicTemplate: React.FC = () => {
             ✏️ Edit About
           </span>
         )}
-        <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Our Philosophy)</span>
-        {/* <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
-          Earth, Water, and Calm
-        </h3> */}
+        <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+          {hotelInfo.aboutTitle || "Earth, Water, and Calm"}
+        </h3>
         <p className="text-[0.875rem] leading-[1.75] text-zinc-500 font-light max-w-lg mx-auto">
           {hotelInfo.shortDescription || hotelInfo.description}
         </p>
@@ -550,8 +772,10 @@ export const OrganicTemplate: React.FC = () => {
         )}
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-1">
-            <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Natural Luxuries)</span>
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Property Amenities</h3>
+            {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Natural Luxuries)</span> */}
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+              {hotelInfo.amenitiesTitle || "Property Amenities"}
+            </h3>
           </div>
 
           {/* 2x5 grid desktop: 10 items always */}
@@ -596,8 +820,10 @@ export const OrganicTemplate: React.FC = () => {
         )}
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-1.5">
-            <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Gatherings & Day Outs)</span>
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Resort Packages & Scheduled Activities</h3>
+            {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Gatherings & Day Outs)</span> */}
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+              {hotelInfo.eventsTitle || "Resort Packages & Scheduled Activities"}
+            </h3>
             <p className="text-[11px] text-zinc-400 lowercase tracking-wider font-light">Book individually — no room reservation needed</p>
           </div>
 
@@ -658,7 +884,7 @@ export const OrganicTemplate: React.FC = () => {
         key="rooms"
         id="rooms"
         onClick={(e) => triggerEdit('rooms', e)}
-        className={`py-12 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+        className={`py-14 px-6 bg-[#FAF6F0] border-y border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
           }`}
       >
         {canvasMode === 'editor' && (
@@ -666,93 +892,22 @@ export const OrganicTemplate: React.FC = () => {
             ✏️ Edit Rooms
           </span>
         )}
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between border-b border-[#D8E2DC] pb-4">
-            <div className="text-left space-y-1.5">
-              <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Eco Suites)</span>
-              <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Our Sanctuary Spaces</h3>
-            </div>
-            <div className="flex gap-2.5 mt-4 sm:mt-0">
-              <button
-                onClick={(e) => { e.stopPropagation(); scrollRooms('left'); }}
-                className="w-8 h-8 rounded-full border border-[#8FA89B] flex items-center justify-center text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white transition cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); scrollRooms('right'); }}
-                className="w-8 h-8 rounded-full border border-[#8FA89B] flex items-center justify-center text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white transition cursor-pointer"
-              >
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            ref={roomScrollRef}
-            className="flex gap-4 overflow-x-auto pb-4 scrollbar-none snap-x snap-mandatory"
-          >
-            {rooms.map((room) => {
-              return (
-                <div
-                  key={room.id}
-                  className="min-w-[280px] max-w-[280px] bg-[#FAF6F0] border border-[#D8E2DC] rounded-2xl flex-col flex overflow-hidden snap-start group/card hover:border-[#8FA89B]/65 hover:scale-[1.01] active:scale-[0.99] transition duration-300 relative cursor-pointer text-left"
-                >
-                  <div className="aspect-4/3 bg-zinc-100 overflow-hidden relative shrink-0">
-                    <img
-                      src={room.photos[0] || "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=600"}
-                      alt={room.name}
-                      className="w-full h-full object-cover group-hover/card:scale-103 transition duration-500"
-                    />
-
-                    {room.totalInventory <= 2 && (
-                      <div className="absolute top-3 left-3 bg-[#E07A5F] text-white text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider shadow-sm z-10 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                        <span>ONLY {room.totalInventory} LEFT!</span>
-                      </div>
-                    )}
-
-                    <div className="absolute bottom-3 right-3 bg-[#FAF6F0]/90 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] text-[#3D405B] font-extrabold">
-                      ${room.basePrice}/night
-                    </div>
-                  </div>
-
-                  <div className="p-4 space-y-4 flex-1 flex flex-col justify-between font-sans">
-                    <div className="space-y-3">
-                      <h4 className="font-extrabold text-[#3D405B] text-xs uppercase tracking-wider">{room.name}</h4>
-
-                      <div className="flex flex-col gap-1.5 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
-                        <div className="flex justify-between items-center border-b border-[#D8E2DC]/40 pb-1">
-                          <span>Size:</span>
-                          <span className="text-[#3D405B] font-extrabold">{room.sizeSqft} sqft</span>
-                        </div>
-                        <div className="flex justify-between items-center border-b border-[#D8E2DC]/40 pb-1">
-                          <span>Available Rooms:</span>
-                          <span className="text-[#3D4530] font-extrabold">{room.totalInventory} units</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span>Beds:</span>
-                          <span className="text-[#3D405B] font-extrabold">{room.bedType || 'King size'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedRoomId(room.id);
-                        setIsBookingOpen(true);
-                        setBookingStep('details');
-                      }}
-                      className="w-full py-2 bg-[#8FA89B] hover:bg-[#7D9387] active:scale-[0.97] text-white rounded-xl transition duration-200 text-4xs uppercase tracking-wider font-extrabold cursor-pointer"
-                    >
-                      Check Availability
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="max-w-6xl mx-auto">
+          <InteractiveSelector
+            rooms={rooms}
+            title={hotelInfo.roomsTitle || 'Our Sanctuary Spaces'}
+            subtitle="Choose from our carefully curated retreat spaces, each designed for pure immersion in nature."
+            onBookRoom={(roomId) => {
+              const r = rooms.find(room => room.id === roomId);
+              if (r) {
+                setSelectedRoomsList([r]);
+                setSelectedRoomId(roomId);
+              }
+              setCheckoutStep(1);
+              setIsBookingOpen(true);
+              setBookingStep('details');
+            }}
+          />
         </div>
       </section>
     ),
@@ -771,8 +926,10 @@ export const OrganicTemplate: React.FC = () => {
         )}
         <div className="max-w-5xl mx-auto space-y-6">
           <div className="text-center space-y-1.5">
-            <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Guest Feedback)</span>
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Guest Reviews</h3>
+            {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Guest Feedback)</span> */}
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+              {hotelInfo.reviewsTitle || "Guest Reviews"}
+            </h3>
             <span className="text-[10px] text-[#8FA89B] font-medium block tracking-[0.1em]">Verified reviews · {testimonials.length > 0 ? (testimonials.reduce((s, t) => s + t.rating, 0) / testimonials.length).toFixed(1) : '5.0'} / 5.0</span>
           </div>
 
@@ -786,16 +943,15 @@ export const OrganicTemplate: React.FC = () => {
     'bento-gallery': (
       <section key="bento-gallery" className="bg-[#FAF6F0] py-4 border-t border-[#D8E2DC] relative">
         <div className="max-w-7xl mx-auto text-center space-y-1.5 mb-6">
-          <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Portrait Diary)</span>
-          <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Natural Vignettes</h3>
+          {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Portrait Diary)</span> */}
+          <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+            {hotelInfo.galleryTitle || "Natural Vignettes"}
+          </h3>
         </div>
         <BentoGallery
-          images={hotelInfo.heroImages}
+          images={managedPhotos.length > 0 ? managedPhotos.map(p => p.url) : hotelInfo.heroImages}
           scrollContainerRef={scrollContainerRef}
-          onImageClick={(idx, imgs) => {
-            setLightboxImages(imgs);
-            setGalleryLightboxIdx(idx);
-          }}
+          onImageClick={() => setIsGalleryOpen(true)}
         />
       </section>
     ),
@@ -815,7 +971,7 @@ export const OrganicTemplate: React.FC = () => {
           {/* Rules */}
           <div className="space-y-4 text-left font-sans">
             <h3 className="text-lg font-serif text-[#3D405B] border-b border-[#8FA89B]/20 pb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Resort Guidelines
+              {hotelInfo.policiesTitle || "Resort Guidelines"}
             </h3>
             <ul className="space-y-3 text-zinc-600 text-2xs font-semibold uppercase tracking-wider font-sans">
               <li className="flex items-center gap-2">
@@ -883,16 +1039,21 @@ export const OrganicTemplate: React.FC = () => {
           )}
           <div className="max-w-4xl mx-auto space-y-6 text-center">
             <div className="space-y-1.5">
-              <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Experiences)</span>
-              <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Eco-Upsells & Local Experiences</h3>
+              {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Experiences)</span> */}
+              <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+                {hotelInfo.addonsTitle || "Eco-Upsells & Local Experiences"}
+              </h3>
             </div>
 
             {/* Visual Add-ons Redesigned cards (matching image 2) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left font-sans">
               {addons.map((addon) => {
-                const qty = addonQuantities[addon.name] || 0;
                 return (
-                  <div key={addon.id} className="bg-white border border-[#D8E2DC] rounded-2xl overflow-hidden flex shadow-xs hover:border-[#8FA89B]/65 hover:scale-[1.01] active:scale-[0.99] transition duration-300 ease-out cursor-pointer">
+                  <div
+                    key={addon.id}
+                    onClick={() => setSelectedAddonDetail(addon)}
+                    className="bg-white border border-[#D8E2DC] rounded-2xl overflow-hidden flex shadow-xs hover:border-[#8FA89B]/65 hover:scale-[1.01] transition duration-300 ease-out cursor-pointer"
+                  >
                     {/* Left: image */}
                     <div className="w-24 h-24 shrink-0 bg-zinc-50 border-r border-[#D8E2DC]">
                       <img
@@ -908,28 +1069,18 @@ export const OrganicTemplate: React.FC = () => {
                         <p className="text-[10px] text-zinc-500 font-sans mt-0.5 line-clamp-2 leading-snug">{addon.description}</p>
                       </div>
 
-                      {/* Price & Quantity Selector */}
+                      {/* Price only */}
                       <div className="flex items-center justify-between pt-2">
-                        <span className="text-4xs font-extrabold text-[#E07A5F]">${addon.price}</span>
+                        <span className="text-4xs font-extrabold text-[#E07A5F] flex items-center gap-1">
+                          <span>₹{addon.price}</span>
+                          <span className="text-[8px] font-normal text-zinc-500 lowercase">
+                            {addon.pricingType === 'per_head' ? 'per guest' : 'flat stay'}
+                          </span>
+                        </span>
 
-                        {/* Quantity Pill Selector */}
-                        <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 text-4xs font-bold">
-                          <button
-                            type="button"
-                            onClick={() => decrementAddon(addon.name)}
-                            className="w-5 h-5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition cursor-pointer"
-                          >
-                            -
-                          </button>
-                          <span className="w-6 text-center text-[#3D405B]">{qty}</span>
-                          <button
-                            type="button"
-                            onClick={() => incrementAddon(addon.name)}
-                            className="w-5 h-5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
+                        <span className="text-[9px] font-bold text-[#8FA89B]">
+                          Details &rarr;
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -955,8 +1106,10 @@ export const OrganicTemplate: React.FC = () => {
         )}
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="text-center space-y-1.5">
-            <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Answers)</span>
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Resort FAQs</h3>
+            {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Answers)</span> */}
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+              {hotelInfo.faqsTitle || "Resort FAQs"}
+            </h3>
           </div>
 
           <div className="space-y-1.5 font-sans font-semibold">
@@ -1110,8 +1263,8 @@ export const OrganicTemplate: React.FC = () => {
       <div className="bg-[#FAF6F0] relative z-10 shadow-2xl">
         {/* 1. HEADER (LOGO + MENU BAR) — TRANS-OVERLAY */}
         <nav className={`px-5 lg:px-8 py-3.5 flex items-center justify-between transition-all duration-500 ease-in-out z-30 sticky top-0 left-0 right-0 w-full mb-[-58px] ${isScrolled
-            ? 'bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]'
-            : 'bg-transparent border-b border-white/10'
+          ? 'bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]'
+          : 'bg-transparent border-b border-white/10'
           }`}>
 
           {/* Logo */}
@@ -1156,8 +1309,8 @@ export const OrganicTemplate: React.FC = () => {
                       }, 100);
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-all duration-200 ${isScrolled
-                        ? 'hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
-                        : 'hover:text-white opacity-85 hover:bg-white/10'
+                      ? 'hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
+                      : 'hover:text-white opacity-85 hover:bg-white/10'
                       }`}
                   >
                     {item.label}
@@ -1174,8 +1327,8 @@ export const OrganicTemplate: React.FC = () => {
                 key={page.id}
                 onClick={() => setPreviewPath(`/pages/${page.slug}`)}
                 className={`px-3 py-1.5 rounded-lg bg-transparent border-none cursor-pointer font-medium text-[9px] uppercase tracking-[0.22em] transition-all duration-200 ${isScrolled
-                    ? 'text-[#556B2F] hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                  ? 'text-[#556B2F] hover:text-[#E07A5F] opacity-90 hover:bg-[#E8E2D6]/50'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
                   }`}
               >
                 {page.title}
@@ -1192,8 +1345,8 @@ export const OrganicTemplate: React.FC = () => {
                 setBookingStep('details');
               }}
               className={`font-bold text-[9px] uppercase tracking-[0.2em] px-5 py-2 rounded-full transition-all duration-300 cursor-pointer whitespace-nowrap ${isScrolled
-                  ? 'bg-[#8FA89B] hover:bg-[#7D9387] text-white shadow-sm'
-                  : 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/40'
+                ? 'bg-[#8FA89B] hover:bg-[#7D9387] text-white shadow-sm'
+                : 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/40'
                 }`}
             >
               Book Now
@@ -1204,8 +1357,8 @@ export const OrganicTemplate: React.FC = () => {
               onClick={() => setIsMobileMenuOpen(true)}
               aria-label="Open navigation menu"
               className={`lg:hidden p-2 rounded-lg transition-all duration-300 cursor-pointer ${isScrolled
-                  ? 'border border-[#D8E2DC] text-[#556B2F] hover:bg-[#E8E2D6]'
-                  : 'border border-white/25 text-white hover:bg-white/10'
+                ? 'border border-[#D8E2DC] text-[#556B2F] hover:bg-[#E8E2D6]'
+                : 'border border-white/25 text-white hover:bg-white/10'
                 }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -1507,38 +1660,100 @@ export const OrganicTemplate: React.FC = () => {
         </div>
       )}
 
-      {/* Gallery Lightbox */}
-      {galleryLightboxIdx !== null && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setGalleryLightboxIdx(null)}>
-          <button
-            onClick={(e) => { e.stopPropagation(); setGalleryLightboxIdx(prev => prev !== null ? Math.max(0, prev - 1) : null); }}
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition cursor-pointer z-10"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="relative max-w-4xl max-h-[85vh] w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={(lightboxImages.length > 0 ? lightboxImages : hotelInfo.heroImages || [])[galleryLightboxIdx]}
-              alt={`Gallery image ${galleryLightboxIdx + 1}`}
-              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
-            />
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-[11px] px-3 py-1 rounded-full backdrop-blur-sm">
-              {galleryLightboxIdx + 1} / {(lightboxImages.length > 0 ? lightboxImages : hotelInfo.heroImages || []).length}
+      {/* Addon Detail Popup */}
+      {selectedAddonDetail && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedAddonDetail(null)}>
+          <div className="bg-[#FAF6F0] rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-[#D8E2DC] animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-[#D8E2DC] flex items-center justify-between">
+              <h3 className="font-medium text-[#3D405B] text-base font-serif">Add-on Details</h3>
+              <button onClick={() => setSelectedAddonDetail(null)} className="w-8 h-8 rounded-full bg-[#E8E2D6] flex items-center justify-center text-[#3D405B] hover:bg-[#D8E2DC] transition cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 text-left">
+              {selectedAddonDetail.image && (
+                <div className="aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-50 border border-[#D8E2DC]">
+                  <img
+                    src={selectedAddonDetail.image}
+                    alt={selectedAddonDetail.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              
+              <div className="space-y-1">
+                <h4 className="text-[#3D405B] font-bold text-sm uppercase tracking-wide">{selectedAddonDetail.name}</h4>
+                <div className="flex items-center gap-2">
+                  <span className="text-[#E07A5F] font-extrabold text-sm">
+                    ₹{selectedAddonDetail.price}
+                  </span>
+                  <span className="text-[10px] bg-[#E8F0EC] text-[#55826A] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {selectedAddonDetail.pricingType === 'per_head' ? 'Per Guest' : 'Flat Fee'}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-zinc-550 font-sans leading-relaxed whitespace-pre-line">
+                {selectedAddonDetail.description}
+              </p>
+              
+              <div className="pt-4 border-t border-[#D8E2DC]/50 flex flex-col gap-2">
+                {isBookingOpen ? (
+                  (addonQuantities[selectedAddonDetail.name] || 0) > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 0 }));
+                        setSelectedAddonDetail(null);
+                      }}
+                      className="w-full py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition text-xs font-bold font-sans cursor-pointer text-center"
+                    >
+                      Remove from Stay
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 1 }));
+                        setSelectedAddonDetail(null);
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-[#8FA89B] text-white hover:bg-[#7D9689] transition text-xs font-bold font-sans cursor-pointer text-center shadow-xs"
+                    >
+                      Add to Stay (₹{selectedAddonDetail.price})
+                    </button>
+                  )
+                ) : (
+                  <div className="bg-[#E8F0EC]/40 border border-[#8FA89B]/25 rounded-2xl p-4 text-center">
+                    <p className="text-[11px] text-[#55826A] font-semibold leading-relaxed font-sans">
+                      ✨ You can add this add-on to your stay during checkout when booking a room.
+                    </p>
+                  </div>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={() => setSelectedAddonDetail(null)}
+                  className="w-full py-2 text-center text-4xs uppercase tracking-wider text-zinc-400 hover:text-zinc-650 transition font-bold font-sans cursor-pointer"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); setGalleryLightboxIdx(prev => prev !== null ? Math.min((lightboxImages.length > 0 ? lightboxImages : hotelInfo.heroImages || []).length - 1, prev + 1) : null); }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition cursor-pointer z-10"
-          >
-            <ArrowRight className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setGalleryLightboxIdx(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
+      )}
+
+      {/* Full Gallery Modal */}
+      {isGalleryOpen && (
+        <FullGalleryModal
+          photos={
+            managedPhotos.length > 0
+              ? managedPhotos
+              : (hotelInfo.heroImages || []).map(url => ({ url, tags: ['all'] }))
+          }
+          onClose={() => setIsGalleryOpen(false)}
+        />
       )}
 
       {/* Booking Drawer overlay */}
@@ -1560,207 +1775,464 @@ export const OrganicTemplate: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left text-zinc-700">
               {bookingStep === 'details' ? (
                 <form onSubmit={handleCreateBooking} className="space-y-4 text-xs">
-
-                  {/* dates selected display */}
-                  <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-3xs text-[#333D29] font-bold tracking-wider uppercase">
-                    <div>
-                      <span className="text-[8px] text-zinc-400 block">CHECK-IN</span>
-                      <span>{checkIn}</span>
-                    </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-[#8FA89B]" />
-                    <div>
-                      <span className="text-[8px] text-zinc-400 block">CHECK-OUT</span>
-                      <span>{checkOut}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[8px] text-zinc-400 block">LENGTH</span>
-                      <span>{totals.nights} Nights</span>
-                    </div>
-                  </div>
-
-                  {/* Date Changer inputs inside drawer */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Change Check-In</label>
-                      <input
-                        type="date"
-                        value={checkIn}
-                        onChange={(e) => setCheckIn(e.target.value)}
-                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-2.5 py-1.5 text-3xs text-zinc-800 outline-hidden font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Change Check-Out</label>
-                      <input
-                        type="date"
-                        value={checkOut}
-                        onChange={(e) => setCheckOut(e.target.value)}
-                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-2.5 py-1.5 text-3xs text-zinc-800 outline-hidden font-mono"
-                      />
+                  {/* Step indicators */}
+                  <div className="flex items-center justify-between border-b border-zinc-200 pb-3 mb-2 shrink-0">
+                    <span className="text-[10px] font-black uppercase text-zinc-400 font-sans">
+                      Step {checkoutStep} of 3
+                    </span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3].map(step => (
+                        <div
+                          key={step}
+                          className={`w-4 h-1 rounded-full transition-all duration-300 ${
+                            checkoutStep === step ? 'bg-[#8FA89B] w-7' : 'bg-zinc-200'
+                          }`}
+                        />
+                      ))}
                     </div>
                   </div>
 
-                  {/* Guest count */}
-                  <div className="space-y-1">
-                    <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Guests Count</label>
-                    <select
-                      value={guestsCount}
-                      onChange={(e) => setGuestsCount(Number(e.target.value))}
-                      className="w-full bg-white border border-[#D8E2DC] rounded-xl px-2.5 py-1.5 text-3xs text-zinc-800 outline-hidden"
-                    >
-                      <option value="1">1 Guest</option>
-                      <option value="2">2 Guests</option>
-                      <option value="3">3 Guests</option>
-                      <option value="4">4 Guests</option>
-                    </select>
-                  </div>
+                  {/* ───────────────── STEP 1 ───────────────── */}
+                  {checkoutStep === 1 && (
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                      {/* Integrated Date Picker in Styled Bar */}
+                      <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-3xs text-[#333D29] font-bold tracking-wider uppercase">
+                        <div className="relative text-left flex-1">
+                          <span className="text-[8px] text-zinc-400 block mb-0.5">CHECK-IN</span>
+                          <input
+                            type="date"
+                            value={checkIn}
+                            onChange={(e) => setCheckIn(e.target.value)}
+                            className="bg-transparent border-0 p-0 text-[11px] font-extrabold text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                          />
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#8FA89B] shrink-0 mx-2" />
+                        <div className="relative text-left flex-1">
+                          <span className="text-[8px] text-zinc-400 block mb-0.5">CHECK-OUT</span>
+                          <input
+                            type="date"
+                            value={checkOut}
+                            onChange={(e) => setCheckOut(e.target.value)}
+                            className="bg-transparent border-0 p-0 text-[11px] font-extrabold text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                          />
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-[8px] text-zinc-400 block">LENGTH</span>
+                          <span>{totals.nights} Nights</span>
+                        </div>
+                      </div>
 
-                  {/* Room Config Summary */}
-                  {selectedRoom && (
-                    <div className="space-y-1.5 p-3 bg-white border border-[#D8E2DC] rounded-2xl">
-                      <span className="text-[8px] text-zinc-400 font-bold uppercase">Suite Selected</span>
-                      <h4 className="font-bold text-[#3D405B] text-xs tracking-wide uppercase">{selectedRoom.name}</h4>
-                      <span className="text-[10px] font-black text-[#E07A5F] block">
-                        Rate: ${selectedRoom.basePrice}/night
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Upsell Addons cards inside Booking Drawer */}
-                  {addons.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-[8px] text-zinc-400 font-bold uppercase block">Add Upsells to stay</span>
-                      <div className="space-y-2.5">
-                        {addons.map(addon => {
-                          const qty = addonQuantities[addon.name] || 0;
-                          return (
-                            <div
-                              key={addon.id}
-                              className="flex items-center justify-between p-2.5 border rounded-2xl bg-white border-[#D8E2DC] text-left"
+                      {/* Occupancy Counters with +/- */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Adults */}
+                        <div className="bg-white border border-zinc-200 p-3 rounded-2xl flex items-center justify-between">
+                          <div>
+                            <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Adults</span>
+                            <span className="text-[9px] text-zinc-400 block">Age 18+</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setAdultsCount(prev => Math.max(1, prev - 1))}
+                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
                             >
-                              <div className="pr-2 max-w-[65%]">
-                                <span className="block font-bold uppercase text-[#3D405B] truncate text-3xs">{addon.name}</span>
-                                <span className="text-[8px] text-zinc-450 leading-none block mt-0.5 line-clamp-1">{addon.description}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">+${addon.price}</span>
+                              -
+                            </button>
+                            <span className="w-4 text-center font-bold text-xs text-[#3D405B]">{adultsCount}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAdultsCount(prev => Math.min(10, prev + 1))}
+                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
 
-                                {/* Quantity selector inside checkout */}
-                                <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 text-[10px] font-bold">
+                        {/* Children */}
+                        <div className="bg-white border border-zinc-200 p-3 rounded-2xl flex items-center justify-between">
+                          <div>
+                            <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Children</span>
+                            <span className="text-[9px] text-zinc-400 block">Age 0-17</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleChildrenCountChange(Math.max(0, childrenCount - 1))}
+                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                            >
+                              -
+                            </button>
+                            <span className="w-4 text-center font-bold text-xs text-[#3D405B]">{childrenCount}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleChildrenCountChange(Math.min(5, childrenCount + 1))}
+                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Child Ages specifiers */}
+                      {childrenCount > 0 && (
+                        <div className="bg-white border border-[#D8E2DC] p-3.5 rounded-2xl space-y-2 animate-in slide-in-from-top-2 duration-205">
+                          <span className="text-[8px] text-zinc-455 font-bold uppercase block font-sans">Specify Child Ages</span>
+                          <div className="grid grid-cols-3 gap-2.5">
+                            {childrenAges.map((age, idx) => (
+                              <div key={idx} className="space-y-1">
+                                <label className="text-[7px] text-zinc-400 font-bold block font-sans">Child {idx + 1} Age</label>
+                                <select
+                                  value={age}
+                                  onChange={(e) => {
+                                    const newAges = [...childrenAges];
+                                    newAges[idx] = Number(e.target.value);
+                                    setChildrenAges(newAges);
+                                  }}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-4xs text-zinc-800 outline-none focus:border-blue-400 transition"
+                                >
+                                  {[...Array(18)].map((_, a) => (
+                                    <option key={a} value={a}>{a} yrs</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Smart Recommendations Section */}
+                      <div className="space-y-2">
+                        <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Smart Suite Recommendations</span>
+                        {recommendations.length === 0 ? (
+                          <p className="text-[10px] text-rose-500 font-bold">No matches fit your group size. Use Custom Combo builder below.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {recommendations.map((rec, idx) => {
+                              const isCurrentlySelected = currentSelectedRooms.length === rec.rooms.length &&
+                                rec.rooms.every(r => currentSelectedRooms.some(curr => curr.id === r.id));
+
+                              return (
+                                <div
+                                  key={idx}
+                                  onClick={() => {
+                                    setSelectedRoomsList(rec.rooms);
+                                    if (rec.rooms[0]) {
+                                      setSelectedRoomId(rec.rooms[0].id);
+                                    }
+                                  }}
+                                  className={`p-3 border rounded-2xl text-left transition duration-200 cursor-pointer ${
+                                    isCurrentlySelected
+                                      ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
+                                      : 'bg-white border-[#D8E2DC] hover:border-[#8FA89B]'
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div className="max-w-[70%]">
+                                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                        rec.type === 'combo' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                      }`}>
+                                        {rec.type === 'combo' ? 'Combo Option' : 'Single Room Option'}
+                                      </span>
+                                      <h4 className="font-bold text-[#3D405B] text-xs pt-1.5 leading-snug">{rec.label}</h4>
+                                      <p className="text-[10px] text-zinc-400 leading-normal mt-0.5">{rec.description}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="text-[11px] font-black text-[#E07A5F] block">₹{rec.price.toLocaleString('en-IN')}</span>
+                                      <span className="text-[8px] text-zinc-400">total stay</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Custom Combo Builder (Make Your Own Combo) */}
+                      <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3 text-left">
+                        <div>
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Make Your Own Combo</span>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
+                        </div>
+                        <div className="space-y-2">
+                          {rooms.map(room => {
+                            const count = currentSelectedRooms.filter(r => r.id === room.id).length;
+                            return (
+                              <div key={room.id} className="flex items-center justify-between py-1.5 border-b border-zinc-50 last:border-0">
+                                <div>
+                                  <span className="font-bold text-[#3D405B] text-2xs block uppercase">{room.name}</span>
+                                  <span className="text-[9px] text-[#E07A5F] font-semibold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                                </div>
+                                <div className="flex items-center gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => decrementAddon(addon.name)}
-                                    className="w-4.5 h-4.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                                    onClick={() => {
+                                      const idx = currentSelectedRooms.findIndex(r => r.id === room.id);
+                                      if (idx > -1) {
+                                        const newList = [...currentSelectedRooms];
+                                        newList.splice(idx, 1);
+                                        setSelectedRoomsList(newList);
+                                      }
+                                    }}
+                                    className="w-5.5 h-5.5 rounded-full bg-zinc-50 border border-zinc-250 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer"
                                   >
                                     -
                                   </button>
-                                  <span className="w-5 text-center text-[#3D405B] text-[10px]">{qty}</span>
+                                  <span className="w-4 text-center font-black text-xs text-[#3D405B]">{count}</span>
                                   <button
                                     type="button"
-                                    onClick={() => incrementAddon(addon.name)}
-                                    className="w-4.5 h-4.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                                    onClick={() => {
+                                      if (count < (room.totalInventory || 5)) {
+                                        setSelectedRoomsList([...currentSelectedRooms, room]);
+                                      }
+                                    }}
+                                    className="w-5.5 h-5.5 rounded-full bg-zinc-50 border border-zinc-250 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer"
                                   >
                                     +
                                   </button>
                                 </div>
                               </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Next button */}
+                      <button
+                        type="button"
+                        onClick={() => setCheckoutStep(2)}
+                        disabled={currentSelectedRooms.length === 0}
+                        className="w-full py-2.5 bg-[#3D405B] hover:bg-[#2d304a] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next: Meal Plans & Addons
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ───────────────── STEP 2 ───────────────── */}
+                  {checkoutStep === 2 && (
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                      {/* Select Meal Plan */}
+                      <div className="space-y-2">
+                        <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Choose Meal Plan</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { key: 'ep', label: 'EP (Room Only)', rate: 'Free', desc: 'No meals included', show: true },
+                            { key: 'cp', label: 'CP (Breakfast)', rate: `+₹${hotelInfo.mealPlanCpAdultRate ?? 300}`, desc: 'Complimentary breakfast', show: hotelInfo.mealPlanCpEnabled !== false },
+                            { key: 'map', label: 'MAP (Half Board)', rate: `+₹${hotelInfo.mealPlanMapAdultRate ?? 1000}`, desc: 'Breakfast + lunch or dinner', show: hotelInfo.mealPlanMapEnabled !== false },
+                            { key: 'ap', label: 'AP (Full Board)', rate: `+₹${hotelInfo.mealPlanApAdultRate ?? 1500}`, desc: 'All daily meals included', show: hotelInfo.mealPlanApEnabled !== false },
+                          ].filter(plan => plan.show).map(plan => (
+                            <div
+                              key={plan.key}
+                              onClick={() => setSelectedMealPlan(plan.key as any)}
+                              className={`p-3 border rounded-2xl text-left cursor-pointer transition duration-200 ${
+                                selectedMealPlan === plan.key
+                                  ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
+                                  : 'bg-white border-zinc-200 hover:border-zinc-300'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-[#3D405B] text-2xs uppercase block">{plan.label}</span>
+                                <span className="text-[9px] font-extrabold text-[#E07A5F]">{plan.rate}</span>
+                              </div>
+                              <p className="text-[9.5px] text-zinc-400 leading-tight">{plan.desc}</p>
+                              <span className="text-[8px] text-zinc-400 block mt-1">per guest / night</span>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Select Add-ons */}
+                      {addons.length > 0 ? (
+                        <div className="space-y-2">
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Add Stay Add-ons</span>
+                          <div className="space-y-2.5">
+                            {addons.map(addon => {
+                              const qty = addonQuantities[addon.name] || 0;
+                              return (
+                                <div
+                                  key={addon.id}
+                                  onClick={() => setSelectedAddonDetail(addon)}
+                                  className={`flex items-center justify-between p-3 border rounded-2xl bg-white text-left transition cursor-pointer ${
+                                    qty > 0 ? 'border-[#8FA89B] bg-[#FAF6F0]/20' : 'border-zinc-200'
+                                  }`}
+                                >
+                                  <div className="pr-2 max-w-[65%]">
+                                    <span className="block font-bold uppercase text-[#3D405B] truncate text-3xs">{addon.name}</span>
+                                    <span className="text-[8px] text-zinc-400 leading-none block mt-0.5 line-clamp-1">{addon.description}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 shrink-0">
+                                    <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">
+                                      +₹{addon.price}
+                                      {addon.pricingType === 'per_head' && <span className="text-[8px] font-normal text-zinc-400 lowercase ml-0.5">/guest</span>}
+                                    </span>
+                                    
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setAddonQuantities(prev => ({
+                                          ...prev,
+                                          [addon.name]: qty > 0 ? 0 : 1
+                                        }));
+                                      }}
+                                      className={`w-6 h-6 rounded-full flex items-center justify-center border transition cursor-pointer ${
+                                        qty > 0
+                                          ? 'bg-[#8FA89B] border-[#8FA89B] text-white'
+                                          : 'border-zinc-300 bg-white hover:border-[#8FA89B]'
+                                      }`}
+                                    >
+                                      {qty > 0 ? (
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      ) : (
+                                        <span className="text-zinc-400 text-xs font-light">+</span>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-zinc-400">No addons configured yet.</p>
+                      )}
+
+                      {/* Navigation buttons */}
+                      <div className="grid grid-cols-2 gap-3 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutStep(1)}
+                          className="w-full py-2.5 border border-zinc-200 hover:bg-zinc-50 text-zinc-500 text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutStep(3)}
+                          className="w-full py-2.5 bg-[#3D405B] hover:bg-[#2d304a] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                        >
+                          Next: Checkout Info
+                        </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Coupons codes */}
-                  <div className="space-y-1.5">
-                    <span className="text-[8px] text-zinc-400 font-bold uppercase block">Coupon / Promo Code</span>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="WELCOME10"
-                        value={promoCode}
-                        onChange={(e) => setPromoCode(e.target.value)}
-                        className="flex-1 bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.5 text-xs text-zinc-800 outline-hidden uppercase font-bold tracking-wider"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleApplyCoupon}
-                        className="px-4 py-1.5 bg-[#8FA89B] text-white rounded-xl text-xs font-bold hover:bg-[#7D9387] transition cursor-pointer"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                    {couponError && <p className="text-[10px] text-rose-500 font-bold">{couponError}</p>}
-                    {appliedCouponCode && (
-                      <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
-                        <Check className="w-3.5 h-3.5 font-bold" />
-                        <span>Promo Code {appliedCouponCode} Applied!</span>
-                      </p>
-                    )}
-                  </div>
+                  {/* ───────────────── STEP 3 ───────────────── */}
+                  {checkoutStep === 3 && (
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                      {/* Guest Details */}
+                      <div className="space-y-2">
+                        <span className="text-[8px] text-zinc-450 font-bold uppercase block tracking-wider">Guest Information</span>
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Your Full Name"
+                            value={guestName}
+                            onChange={(e) => setGuestName(e.target.value)}
+                            className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="email"
+                              required
+                              placeholder="Email Address"
+                              value={guestEmail}
+                              onChange={(e) => setGuestEmail(e.target.value)}
+                              className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
+                            />
+                            <input
+                              type="tel"
+                              placeholder="Phone Number"
+                              value={guestPhone}
+                              onChange={(e) => setGuestPhone(e.target.value)}
+                              className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
 
-                  {/* Checkout guest inputs */}
-                  <div className="space-y-2.5 pt-2.5 border-t border-[#D8E2DC]">
-                    <span className="text-[8px] text-zinc-450 font-bold uppercase block">Guest Details</span>
-                    <div className="space-y-1.5">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Your Full Name"
-                        value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
-                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="email"
-                          required
-                          placeholder="Email Address"
-                          value={guestEmail}
-                          onChange={(e) => setGuestEmail(e.target.value)}
-                          className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
-                        />
-                        <input
-                          type="tel"
-                          placeholder="Phone Number"
-                          value={guestPhone}
-                          onChange={(e) => setGuestPhone(e.target.value)}
-                          className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
-                        />
+                      {/* Coupons Codes */}
+                      <div className="space-y-1.5 bg-white border border-zinc-200 p-3 rounded-2xl">
+                        <span className="text-[8px] text-zinc-400 font-bold uppercase block">Coupon / Promo Code</span>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="WELCOME10"
+                            value={promoCode}
+                            onChange={(e) => setPromoCode(e.target.value)}
+                            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-1.5 text-xs text-zinc-800 outline-none uppercase font-bold tracking-wider"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyCoupon}
+                            className="px-4 py-1.5 bg-[#8FA89B] text-white rounded-xl text-xs font-bold hover:bg-[#7D9387] transition cursor-pointer"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                        {couponError && <p className="text-[10px] text-rose-500 font-bold">{couponError}</p>}
+                        {appliedCouponCode && (
+                          <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
+                            <Check className="w-3.5 h-3.5 font-bold" />
+                            <span>Promo Code {appliedCouponCode} Applied!</span>
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Pricing Breakdown Summary */}
+                      <div className="p-4 bg-white rounded-2xl border border-zinc-200 space-y-2.5 text-3xs font-semibold uppercase tracking-wider font-sans">
+                        <div className="flex justify-between text-zinc-450">
+                          <span>Room Subtotal ({totals.nights} Nights)</span>
+                          <span>₹{totals.subtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        {totals.mealPlanTotal > 0 && (
+                          <div className="flex justify-between text-zinc-450">
+                            <span>Meal Plan ({selectedMealPlan.toUpperCase()})</span>
+                            <span>+₹{totals.mealPlanTotal.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        {totals.addonTotal > 0 && (
+                          <div className="flex justify-between text-zinc-450">
+                            <span>Stay Add-ons</span>
+                            <span>+₹{totals.addonTotal.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        {totals.discount > 0 && (
+                          <div className="flex justify-between text-emerald-650 font-bold">
+                            <span>Coupon Discount</span>
+                            <span>-₹{totals.discount.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-black text-xs text-[#3D405B] border-t border-zinc-200 pt-2.5">
+                          <span>Total Stay Invoice</span>
+                          <span className="text-[#E07A5F]">₹{totals.grandTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {/* Navigation buttons */}
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutStep(2)}
+                          className="w-full py-2.5 border border-zinc-200 hover:bg-zinc-50 text-zinc-500 text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-[#8FA89B] hover:bg-[#7D9387] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-sm cursor-pointer"
+                        >
+                          Proceed to Payment
+                        </button>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Pricing Breakdown summary */}
-                  <div className="p-4 bg-white rounded-2xl border border-[#D8E2DC] space-y-2 text-3xs font-semibold uppercase tracking-wider font-sans">
-                    <div className="flex justify-between text-zinc-450">
-                      <span>Stay Subtotal ({totals.nights} Nights)</span>
-                      <span>${totals.subtotal.toFixed(2)}</span>
-                    </div>
-                    {totals.discount > 0 && (
-                      <div className="flex justify-between text-emerald-600">
-                        <span>Promo Coupon discount</span>
-                        <span>-${totals.discount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {totals.addonTotal > 0 && (
-                      <div className="flex justify-between text-zinc-455">
-                        <span>Stay Add-ons</span>
-                        <span>+${totals.addonTotal.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-black text-xs text-[#3D405B] border-t border-[#D8E2DC] pt-2">
-                      <span>Total Invoice</span>
-                      <span className="text-[#E07A5F]">${totals.grandTotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#8FA89B] hover:bg-[#7D9387] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-sm duration-300 cursor-pointer"
-                  >
-                    Confirm & Book Stay
-                  </button>
+                  )}
 
                 </form>
               ) : (

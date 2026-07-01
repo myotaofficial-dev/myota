@@ -1,9 +1,9 @@
-import { StaggerTestimonials } from "@/components/ui/stagger-testimonials";
+import InteractiveSelector from "@/components/ui/interactive-selector";
 
 const DemoOne = () => {
   return (
-    <div className="flex w-full h-screen justify-center items-center">
-      <StaggerTestimonials />
+    <div className="w-full h-min-screen">
+      <InteractiveSelector />
     </div>
   );
 };

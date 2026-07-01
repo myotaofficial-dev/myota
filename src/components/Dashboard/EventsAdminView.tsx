@@ -4,7 +4,7 @@ import { Plus, Edit2, Trash2, X, Sparkles, Calendar, DollarSign, Users, Clock } 
 import { MediaUpload } from '../ui/MediaUpload';
 
 export const EventsAdminView: React.FC = () => {
-  const { guestEvents, addGuestEvent, updateGuestEvent, deleteGuestEvent } = useHotel();
+  const { guestEvents, addGuestEvent, updateGuestEvent, deleteGuestEvent, hotelInfo, updateHotelInfo } = useHotel();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -97,6 +97,19 @@ export const EventsAdminView: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>Create Event</span>
         </button>
+      </div>
+
+      {/* Section Title Configuration */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-3xs space-y-2">
+        <label className="text-xs font-bold text-zinc-700">Events Section Title</label>
+        <p className="text-[10px] text-zinc-400">Configure the main heading of the activities and events section on the homepage.</p>
+        <input 
+          type="text" 
+          value={hotelInfo.eventsTitle || 'Resort Packages & Scheduled Activities'} 
+          onChange={(e) => updateHotelInfo({ eventsTitle: e.target.value })}
+          placeholder="e.g. Resort Packages & Scheduled Activities"
+          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-1.5 text-xs text-zinc-900 outline-hidden transition font-sans" 
+        />
       </div>
 
       {/* Events Grid */}

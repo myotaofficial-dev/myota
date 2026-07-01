@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useHotel } from '../../context/HotelContext';
-import { Plus, Edit2, Trash2, X, PlusCircle, DollarSign } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, PlusCircle } from 'lucide-react';
 import { MediaUpload } from '../ui/MediaUpload';
 
 export const AddonsView: React.FC = () => {
-  const { addons, addAddon, updateAddon, deleteAddon } = useHotel();
+  const { addons, addAddon, updateAddon, deleteAddon, hotelInfo, updateHotelInfo } = useHotel();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -13,6 +13,7 @@ export const AddonsView: React.FC = () => {
   const [price, setPrice] = useState(500);
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
+  const [pricingType, setPricingType] = useState<'per_head' | 'single_event'>('single_event');
 
   // Helper to format Rupees
   const formatRupees = (val: number) => {
@@ -28,6 +29,7 @@ export const AddonsView: React.FC = () => {
     setPrice(500);
     setDescription('');
     setImage('');
+    setPricingType('single_event');
     setEditingId(null);
     setIsEditing(true);
   };
@@ -37,13 +39,14 @@ export const AddonsView: React.FC = () => {
     setPrice(addon.price);
     setDescription(addon.description);
     setImage(addon.image || '');
+    setPricingType(addon.pricingType || 'single_event');
     setEditingId(addon.id);
     setIsEditing(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data = { name, price: Number(price), description, image };
+    const data = { name, price: Number(price), description, image, pricingType };
 
     if (editingId) {
       updateAddon(editingId, data);
@@ -70,6 +73,19 @@ export const AddonsView: React.FC = () => {
         </button>
       </div>
 
+      {/* Section Title Configuration */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-5 shadow-xs space-y-2 text-left">
+        <label className="text-xs font-bold text-zinc-700">Add-ons Section Title</label>
+        <p className="text-[10px] text-zinc-400">Configure the main heading of the stay add-ons and experiences section on the homepage.</p>
+        <input 
+          type="text" 
+          value={hotelInfo.addonsTitle || 'Eco-Upsells & Local Experiences'} 
+          onChange={(e) => updateHotelInfo({ addonsTitle: e.target.value })}
+          placeholder="e.g. Eco-Upsells & Local Experiences"
+          className="w-full bg-[#FAFAF9] border border-[#E7E5E4] focus:border-[#1B93A4] focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" 
+        />
+      </div>
+
       {/* Grid of Addons */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {addons.map(addon => {
@@ -81,8 +97,11 @@ export const AddonsView: React.FC = () => {
                   <h3 className="font-bold text-[#1C1917]">{addon.name}</h3>
                   <p className="text-xs text-[#78716C] line-clamp-2">{addon.description}</p>
                 </div>
-                <span className="ds-badge ds-badge-teal text-[11px] shrink-0 font-extrabold">
-                  {formatRupees(displayPrice)}
+                <span className="ds-badge ds-badge-teal text-[11px] shrink-0 font-extrabold flex flex-col items-end">
+                  <span>{formatRupees(displayPrice)}</span>
+                  <span className="text-[8px] font-medium text-zinc-550 uppercase tracking-wider mt-0.5">
+                    {addon.pricingType === 'per_head' ? 'Per Head' : 'Per Event'}
+                  </span>
                 </span>
               </div>
 
@@ -163,6 +182,34 @@ export const AddonsView: React.FC = () => {
                     onChange={(e) => setPrice(Number(e.target.value))}
                     className="ds-input w-full pl-7"
                   />
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <label className="ds-overline block">Pricing Mode</label>
+                <div className="flex items-center gap-6 mt-1">
+                  <label className="flex items-center gap-2 text-xs font-bold text-zinc-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricingType"
+                      value="per_head"
+                      checked={pricingType === 'per_head'}
+                      onChange={() => setPricingType('per_head')}
+                      className="w-4 h-4 accent-[#1B93A4] cursor-pointer"
+                    />
+                    <span>Per Head Rate</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-zinc-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricingType"
+                      value="single_event"
+                      checked={pricingType === 'single_event'}
+                      onChange={() => setPricingType('single_event')}
+                      className="w-4 h-4 accent-[#1B93A4] cursor-pointer"
+                    />
+                    <span>Single Event Fee</span>
+                  </label>
                 </div>
               </div>
 

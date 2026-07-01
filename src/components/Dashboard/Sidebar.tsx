@@ -1,7 +1,7 @@
 import React from 'react';
 import { useHotel } from '../../context/HotelContext';
-import { 
-  Info, FileText, Sparkles, MapPin, Phone, UserCheck, 
+import {
+  Info, FileText, Sparkles, MapPin, Phone, UserCheck,
   Image, BedDouble, Calendar, Globe, Plus, BadgePercent, HelpCircle,
   Move, Mail, MessageSquare, ShieldCheck, Eye, CreditCard, Layout, Video
 } from 'lucide-react';
@@ -25,6 +25,8 @@ export const Sidebar: React.FC = () => {
       title: "Property",
       items: [
         { id: "property", label: "Basic Info", icon: Info },
+        { id: "rearrange", label: "Rearrange", icon: Move },
+        { id: "hero", label: "Hero Banner", icon: Image },
         { id: "description", label: "Description", icon: FileText },
         { id: "amenities", label: "Amenities", icon: Sparkles },
         { id: "location-map", label: "Location Map", icon: MapPin },
@@ -44,6 +46,7 @@ export const Sidebar: React.FC = () => {
       items: [
         { id: "rooms", label: "Rooms", icon: BedDouble },
         { id: "pricing-calendar", label: "Pricing & Calendar", icon: Calendar },
+        { id: "cancellation-policies", label: "Cancellation policies", icon: ShieldCheck },
         { id: "channel-manager", label: "Channel Manager", icon: Globe },
         { id: "addons", label: "Add-ons", icon: Plus },
         { id: "coupons", label: "Coupons", icon: BadgePercent }
@@ -53,7 +56,7 @@ export const Sidebar: React.FC = () => {
       title: "Guest Experience",
       items: [
         { id: "events-admin", label: "Events", icon: Sparkles },
-        { id: "rearrange", label: "Highlights", icon: Move },
+        { id: "media", label: "Highlights", icon: Image },
         { id: "messages", label: "Guest Messages", icon: Mail }
       ]
     },
@@ -99,11 +102,10 @@ export const Sidebar: React.FC = () => {
                           setEditorFocus('form');
                         }
                       }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${
-                        isActive
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${isActive
                           ? 'font-bold'
                           : 'hover:bg-white'
-                      }`}
+                        }`}
                       style={isActive ? {
                         background: 'var(--ds-primary-subtle)',
                         color: 'var(--ds-primary)',
@@ -111,9 +113,9 @@ export const Sidebar: React.FC = () => {
                         color: 'var(--ds-text-secondary)',
                       }}
                     >
-                      <Icon 
-                        className="w-3.5 h-3.5 shrink-0" 
-                        style={{ color: isActive ? 'var(--ds-primary)' : 'var(--ds-text-muted)' }} 
+                      <Icon
+                        className="w-3.5 h-3.5 shrink-0"
+                        style={{ color: isActive ? 'var(--ds-primary)' : 'var(--ds-text-muted)' }}
                       />
                       <span className="truncate">{item.label}</span>
                     </button>
