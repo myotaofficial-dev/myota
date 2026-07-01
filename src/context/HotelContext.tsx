@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 // --- TS Interfaces ---
 
@@ -779,6 +780,188 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [selectedTheme]);
 
+  // --- Supabase Synchronization Engine ---
+
+  // Load initial data from Supabase on mount
+  useEffect(() => {
+    const loadSupabaseData = async () => {
+      try {
+        // 1. Fetch hotel info
+        const { data: hotelData, error: hotelErr } = await supabase
+          .from('hotel_info')
+          .select('*')
+          .eq('id', 'myota')
+          .single();
+
+        if (!hotelErr && hotelData) {
+          setHotelInfoState(prev => ({
+            ...prev,
+            ...hotelData.raw_data,
+            name: hotelData.name,
+            address: hotelData.address || prev.address,
+            description: hotelData.description || prev.description,
+            cancellationPolicyType: hotelData.cancellation_policy_type || prev.cancellationPolicyType,
+            nonRefundableDiscountAmount: hotelData.non_refundable_discount_amount ?? prev.nonRefundableDiscountAmount,
+            paymentCollectionType: (hotelData.payment_collection_type as any) || prev.paymentCollectionType,
+            paymentCollectionPercent: hotelData.payment_collection_percent ?? prev.paymentCollectionPercent
+          }));
+        } else if (hotelErr && hotelErr.code === 'PGRST116') {
+          // Seed initial configuration row
+          await supabase.from('hotel_info').insert({
+            id: 'myota',
+            name: defaultHotelInfo.name,
+            address: defaultHotelInfo.address,
+            description: defaultHotelInfo.description,
+            cancellation_policy_type: defaultHotelInfo.cancellationPolicyType || '2d',
+            non_refundable_discount_amount: defaultHotelInfo.nonRefundableDiscountAmount || 200,
+            payment_collection_type: defaultHotelInfo.paymentCollectionType || 'partial',
+            payment_collection_percent: defaultHotelInfo.paymentCollectionPercent || 50,
+            raw_data: defaultHotelInfo
+          });
+        }
+
+        // 2. Fetch room categories
+        const { data: roomsData, error: roomsErr } = await supabase
+          .from('room_categories')
+          .select('*')
+          .order('updated_at', { ascending: true });
+
+        if (!roomsErr && roomsData && roomsData.length > 0) {
+          const mappedRooms: RoomType[] = roomsData.map(r => ({
+            id: r.id,
+            name: r.name,
+            description: r.description || '',
+            capacityAdults: r.capacity_adults,
+            capacityChildren: r.capacity_children,
+            basePrice: r.base_price,
+            totalInventory: r.total_inventory,
+            sizeSqft: 300,
+            bedType: '',
+            amenities: r.amenities || [],
+            photos: r.photos || [],
+            is_active: r.is_active,
+            beds: r.beds || {},
+            extra_beds: r.extra_beds || {},
+            price_tiers: r.price_tiers || {},
+            inventory_overrides: r.inventory_overrides || {},
+            rate_overrides: r.rate_overrides || {},
+            cancellation_policy_overrides: r.cancellation_policy_overrides || {},
+            min_occupancy: r.min_occupancy || 1,
+            base_occupancy: r.base_occupancy || r.capacity_adults
+          }));
+          setRooms(mappedRooms);
+        } else if (!roomsErr && (!roomsData || roomsData.length === 0)) {
+          // Seed default rooms to Supabase
+          const seedRooms = defaultRooms.map(r => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            capacity_adults: r.capacityAdults,
+            capacity_children: r.capacityChildren,
+            base_price: r.basePrice,
+            total_inventory: r.totalInventory,
+            min_occupancy: 1,
+            base_occupancy: r.capacityAdults,
+            beds: {},
+            extra_beds: {},
+            price_tiers: { '1': r.basePrice, '2': Math.round(r.basePrice * 1.15) },
+            amenities: r.amenities,
+            photos: r.photos,
+            is_active: true
+          }));
+          await supabase.from('room_categories').insert(seedRooms);
+        }
+
+        // 3. Fetch bookings
+        const { data: bookingsData } = await supabase
+          .from('bookings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (bookingsData && bookingsData.length > 0) {
+          const mappedBookings: Booking[] = bookingsData.map(b => ({
+            id: b.id,
+            roomId: b.room_id || '',
+            roomName: b.room_name || '',
+            guestName: b.guest_name,
+            guestEmail: b.guest_email,
+            guestPhone: b.guest_phone || '',
+            checkIn: b.check_in,
+            checkOut: b.check_out,
+            totalPrice: Number(b.total_price),
+            paymentStatus: b.payment_status as any,
+            bookingStatus: b.booking_status as any,
+            addons: b.addons || [],
+            couponCode: b.coupon_code || '',
+            createdAt: b.created_at
+          }));
+          setBookings(mappedBookings);
+        }
+      } catch (err) {
+        console.warn('Supabase offline or initial load skipped:', err);
+      }
+    };
+
+    loadSupabaseData();
+  }, []);
+
+  // Sync changes of hotelInfo to Supabase
+  useEffect(() => {
+    const syncHotelInfo = async () => {
+      try {
+        await supabase.from('hotel_info').upsert({
+          id: 'myota',
+          name: hotelInfo.name,
+          address: hotelInfo.address,
+          description: hotelInfo.description,
+          cancellation_policy_type: hotelInfo.cancellationPolicyType || '2d',
+          non_refundable_discount_amount: hotelInfo.nonRefundableDiscountAmount || 0,
+          payment_collection_type: hotelInfo.paymentCollectionType || 'partial',
+          payment_collection_percent: hotelInfo.paymentCollectionPercent || 50,
+          raw_data: hotelInfo,
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Supabase syncHotelInfo error:', err);
+      }
+    };
+    syncHotelInfo();
+  }, [hotelInfo]);
+
+  // Sync changes of rooms to Supabase
+  useEffect(() => {
+    const syncRooms = async () => {
+      try {
+        for (const room of rooms) {
+          await supabase.from('room_categories').upsert({
+            id: room.id,
+            name: room.name,
+            description: room.description,
+            capacity_adults: room.capacityAdults,
+            capacity_children: room.capacityChildren,
+            base_price: room.basePrice,
+            total_inventory: room.totalInventory,
+            min_occupancy: room.min_occupancy,
+            base_occupancy: room.base_occupancy,
+            beds: room.beds,
+            extra_beds: room.extra_beds,
+            price_tiers: room.price_tiers,
+            amenities: room.amenities,
+            photos: room.photos,
+            inventory_overrides: room.inventory_overrides,
+            rate_overrides: room.rate_overrides,
+            cancellation_policy_overrides: room.cancellation_policy_overrides,
+            is_active: room.is_active,
+            updated_at: new Date().toISOString()
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase syncRooms error:', err);
+      }
+    };
+    syncRooms();
+  }, [rooms]);
+
   // Actions
   const addProperty = (name: string) => {
     const newProp: PropertyItem = {
@@ -862,7 +1045,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const addBooking = (bookingData: Omit<Booking, 'id' | 'createdAt'>) => {
+  const addBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt'>) => {
     const newBooking: Booking = {
       ...bookingData,
       id: `book-${Date.now()}`,
@@ -870,10 +1053,39 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
     setBookings(prev => [newBooking, ...prev]);
     addEventLog('New Booking Confirmed', `Reservation booked for ${bookingData.guestName} ($${bookingData.totalPrice})`, 'booking');
+
+    try {
+      await supabase.from('bookings').insert({
+        id: newBooking.id,
+        room_id: newBooking.roomId,
+        room_name: newBooking.roomName,
+        guest_name: newBooking.guestName,
+        guest_email: newBooking.guestEmail,
+        guest_phone: newBooking.guestPhone,
+        check_in: newBooking.checkIn,
+        check_out: newBooking.checkOut,
+        total_price: newBooking.totalPrice,
+        payment_status: newBooking.paymentStatus,
+        booking_status: newBooking.bookingStatus,
+        addons: newBooking.addons,
+        coupon_code: newBooking.couponCode,
+        created_at: newBooking.createdAt
+      });
+    } catch (err) {
+      console.warn('Supabase addBooking error:', err);
+    }
   };
 
-  const cancelBooking = (id: string) => {
+  const cancelBooking = async (id: string) => {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, bookingStatus: 'cancelled' } : b));
+    try {
+      await supabase
+        .from('bookings')
+        .update({ booking_status: 'cancelled' })
+        .eq('id', id);
+    } catch (err) {
+      console.warn('Supabase cancelBooking error:', err);
+    }
   };
 
   const addAddon = (addon: Omit<Addon, 'id'>) => {
