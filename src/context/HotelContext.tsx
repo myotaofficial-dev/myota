@@ -781,186 +781,285 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [selectedTheme]);
 
   // --- Supabase Synchronization Engine ---
+  // Strategy: localStorage = immediate UI reactivity; Supabase = source of truth.
+  // On mount, load all data from Supabase. All CRUD functions push changes
+  // to both local state and Supabase in parallel.
 
-  // Load initial data from Supabase on mount
+  // Helpers: map DB rows → TS interfaces
+  const mapDbRoom = (r: any): RoomType => ({
+    id: r.id,
+    name: r.name,
+    description: r.description || '',
+    capacityAdults: r.capacity_adults,
+    capacityChildren: r.capacity_children,
+    basePrice: Number(r.base_price),
+    totalInventory: r.total_inventory,
+    sizeSqft: r.size_sqft || 0,
+    bedType: r.bed_type || '',
+    amenities: r.amenities || [],
+    photos: r.photos || [],
+    is_active: r.is_active ?? true,
+    beds: r.beds || {},
+    extra_beds: r.extra_beds || {},
+    price_tiers: r.price_tiers || {},
+    inventory_overrides: r.inventory_overrides || {},
+    rate_overrides: r.rate_overrides || {},
+    cancellation_policy_overrides: r.cancellation_policy_overrides || {},
+    min_occupancy: r.min_occupancy || 1,
+    base_occupancy: r.base_occupancy || r.capacity_adults,
+  });
+
+  const mapDbBooking = (b: any): Booking => ({
+    id: b.id,
+    roomId: b.room_id || '',
+    roomName: b.room_name || '',
+    guestName: b.guest_name,
+    guestEmail: b.guest_email,
+    guestPhone: b.guest_phone || '',
+    checkIn: b.check_in,
+    checkOut: b.check_out,
+    totalPrice: Number(b.total_price),
+    paymentStatus: b.payment_status as Booking['paymentStatus'],
+    bookingStatus: b.booking_status as Booking['bookingStatus'],
+    addons: b.addons || [],
+    couponCode: b.coupon_code || '',
+    createdAt: b.created_at,
+  });
+
+  const mapDbAddon = (a: any): Addon => ({
+    id: a.id,
+    name: a.name,
+    description: a.description || '',
+    price: Number(a.price),
+    image: a.image || undefined,
+    pricingType: (a.pricing_type || 'single_event') as Addon['pricingType'],
+  });
+
+  const mapDbCoupon = (c: any): Coupon => ({
+    id: c.id,
+    code: c.code,
+    discountType: c.discount_type as Coupon['discountType'],
+    discountValue: Number(c.discount_value),
+    active: c.active,
+  });
+
+  const mapDbTestimonial = (t: any): Testimonial => ({
+    id: t.id,
+    author: t.author,
+    content: t.content,
+    rating: t.rating,
+    stayDate: t.stay_date || '',
+    avatarUrl: t.avatar_url || undefined,
+  });
+
+  const mapDbFaq = (f: any): FAQ => ({
+    id: f.id,
+    question: f.question,
+    answer: f.answer,
+  });
+
+  const mapDbPolicy = (p: any): Policy => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+  });
+
+  const mapDbCustomPage = (p: any): CustomPage => ({
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    content: p.content || '',
+    active: p.active,
+    type: p.page_type as CustomPage['type'],
+    bannerImage: p.banner_image || undefined,
+    tagline: p.tagline || undefined,
+    restaurantMenu: p.restaurant_menu || [],
+    banquetCapacity: p.banquet_capacity || undefined,
+    banquetFeatures: p.banquet_features || [],
+    blogPosts: p.blog_posts || [],
+    activitiesList: p.activities_list || [],
+  });
+
+  const mapDbGuestEvent = (e: any): GuestEvent => ({
+    id: e.id,
+    title: e.title,
+    category: e.category || '',
+    description: e.description || '',
+    image: e.image || '',
+    fromDate: e.from_date,
+    toDate: e.to_date,
+    time: e.time || '',
+    price: Number(e.price),
+    capacity: e.capacity,
+    date: e.from_date,
+  });
+
+  const mapDbMessage = (m: any): GuestMessage => ({
+    id: m.id,
+    senderName: m.sender_name,
+    senderEmail: m.sender_email,
+    senderPhone: m.sender_phone || '',
+    subject: m.subject || '',
+    message: m.message,
+    date: m.sent_date || m.created_at?.slice(0, 10) || '',
+    read: m.is_read,
+  });
+
+  const mapDbCoHost = (h: any): CoHost => ({
+    id: h.id,
+    name: h.name,
+    phone: h.phone || '',
+    role: h.role as CoHost['role'],
+    canReceiveCalls: h.can_receive_calls,
+    canAcceptBookings: h.can_accept_bookings,
+  });
+
+  const mapDbMedia = (m: any): ManagedPhoto | ManagedVideo => ({
+    id: m.id,
+    url: m.url,
+    tags: m.tags || [],
+    isHero: m.is_hero,
+  });
+
+  const mapDbHotelSettings = (s: any): Partial<HotelInfo> => ({
+    name: s.name,
+    subdomain: s.subdomain,
+    customDomain: s.custom_domain,
+    starRating: s.star_rating,
+    checkInTime: s.check_in_time,
+    checkOutTime: s.check_out_time,
+    phone: s.phone,
+    email: s.email,
+    address: s.address,
+    latitude: s.latitude,
+    longitude: s.longitude,
+    tagline: s.tagline,
+    description: s.description,
+    shortDescription: s.short_description,
+    detailedDescription: s.detailed_description,
+    websiteHeadline: s.website_headline,
+    aboutTitle: s.about_title,
+    amenitiesTitle: s.amenities_title,
+    eventsTitle: s.events_title,
+    roomsTitle: s.rooms_title,
+    reviewsTitle: s.reviews_title,
+    galleryTitle: s.gallery_title,
+    addonsTitle: s.addons_title,
+    faqsTitle: s.faqs_title,
+    policiesTitle: s.policies_title,
+    primaryColor: s.primary_color,
+    secondaryColor: s.secondary_color,
+    bgColor: s.bg_color,
+    fontHeader: s.font_header,
+    fontBody: s.font_body,
+    logoUrl: s.logo_url,
+    faviconUrl: s.favicon_url,
+    googleAnalyticsId: s.google_analytics_id,
+    facebookPixelId: s.facebook_pixel_id,
+    instagramHandle: s.instagram_handle,
+    googleBusinessName: s.google_business_name,
+    heroStyle: s.hero_style,
+    heroImages: s.hero_images || [],
+    heroVideo: s.hero_video,
+    generalAmenities: s.general_amenities || [],
+    customAmenities: s.custom_amenities || [],
+    sectionOrder: s.section_order || [],
+    disabledSections: s.disabled_sections || [],
+    menuItemsOrder: s.menu_items_order || [],
+    disabledMenuItems: s.disabled_menu_items || [],
+    showEvents: s.show_events,
+    childPolicyEnabled: s.child_policy_enabled,
+    childPolicyMinAge: s.child_policy_min_age,
+    childPolicyMaxAge: s.child_policy_max_age,
+    extraAdultRate: Number(s.extra_adult_rate),
+    extraChildRate: Number(s.extra_child_rate),
+    mealPlanCpEnabled: s.meal_plan_cp_enabled,
+    mealPlanCpAdultRate: Number(s.meal_plan_cp_adult_rate),
+    mealPlanCpChildRate: Number(s.meal_plan_cp_child_rate),
+    mealPlanMapEnabled: s.meal_plan_map_enabled,
+    mealPlanMapAdultRate: Number(s.meal_plan_map_adult_rate),
+    mealPlanMapChildRate: Number(s.meal_plan_map_child_rate),
+    mealPlanApEnabled: s.meal_plan_ap_enabled,
+    mealPlanApAdultRate: Number(s.meal_plan_ap_adult_rate),
+    mealPlanApChildRate: Number(s.meal_plan_ap_child_rate),
+    defaultMealPlan: s.default_meal_plan,
+    cancellationPolicyType: s.cancellation_policy_type,
+    cancellationPolicyCustomText: s.cancellation_policy_custom_text,
+    nonRefundableDiscountAmount: Number(s.non_refundable_discount_amount),
+    customCancellationPolicies: s.custom_cancellation_policies || [],
+    paymentCollectionType: s.payment_collection_type,
+    paymentCollectionPercent: s.payment_collection_percent,
+  });
+
+  // Load all data from Supabase on mount (parallel fetch)
   useEffect(() => {
-    const loadSupabaseData = async () => {
+    const loadAll = async () => {
+      const pid = activePropertyId;
       try {
-        // 1. Fetch hotel info
-        const { data: hotelData, error: hotelErr } = await supabase
-          .from('hotel_info')
-          .select('*')
-          .eq('id', 'myota')
-          .single();
+        const [
+          { data: settingsData },
+          { data: roomsData },
+          { data: bookingsData },
+          { data: addonsData },
+          { data: couponsData },
+          { data: testimonialsData },
+          { data: faqsData },
+          { data: policiesData },
+          { data: pagesData },
+          { data: guestEventsData },
+          { data: coHostsData },
+          { data: mediaData },
+          { data: messagesData },
+          { data: eventLogsData },
+        ] = await Promise.all([
+          supabase.from('hotel_settings').select('*').eq('property_id', pid).single(),
+          supabase.from('room_categories').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('bookings').select('*').eq('property_id', pid).order('created_at', { ascending: false }),
+          supabase.from('addons').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('coupons').select('*').eq('property_id', pid),
+          supabase.from('testimonials').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('faqs').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('policies').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('custom_pages').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('guest_events').select('*').eq('property_id', pid).order('from_date'),
+          supabase.from('co_hosts').select('*').eq('property_id', pid),
+          supabase.from('media_library').select('*').eq('property_id', pid).order('display_order'),
+          supabase.from('guest_messages').select('*').eq('property_id', pid).order('created_at', { ascending: false }),
+          supabase.from('event_logs').select('*').eq('property_id', pid).order('created_at', { ascending: false }).limit(50),
+        ]);
 
-        if (!hotelErr && hotelData) {
-          setHotelInfoState(prev => ({
-            ...prev,
-            ...hotelData.raw_data,
-            name: hotelData.name,
-            address: hotelData.address || prev.address,
-            description: hotelData.description || prev.description,
-            cancellationPolicyType: hotelData.cancellation_policy_type || prev.cancellationPolicyType,
-            nonRefundableDiscountAmount: hotelData.non_refundable_discount_amount ?? prev.nonRefundableDiscountAmount,
-            paymentCollectionType: (hotelData.payment_collection_type as any) || prev.paymentCollectionType,
-            paymentCollectionPercent: hotelData.payment_collection_percent ?? prev.paymentCollectionPercent
-          }));
-        } else if (hotelErr && hotelErr.code === 'PGRST116') {
-          // Seed initial configuration row
-          await supabase.from('hotel_info').insert({
-            id: 'myota',
-            name: defaultHotelInfo.name,
-            address: defaultHotelInfo.address,
-            description: defaultHotelInfo.description,
-            cancellation_policy_type: defaultHotelInfo.cancellationPolicyType || '2d',
-            non_refundable_discount_amount: defaultHotelInfo.nonRefundableDiscountAmount || 200,
-            payment_collection_type: defaultHotelInfo.paymentCollectionType || 'partial',
-            payment_collection_percent: defaultHotelInfo.paymentCollectionPercent || 50,
-            raw_data: defaultHotelInfo
-          });
+        if (settingsData) setHotelInfoState(prev => ({ ...prev, ...mapDbHotelSettings(settingsData) }));
+        if (roomsData && roomsData.length > 0) setRooms(roomsData.map(mapDbRoom));
+        if (bookingsData && bookingsData.length > 0) setBookings(bookingsData.map(mapDbBooking));
+        if (addonsData && addonsData.length > 0) setAddons(addonsData.map(mapDbAddon));
+        if (couponsData && couponsData.length > 0) setCoupons(couponsData.map(mapDbCoupon));
+        if (testimonialsData && testimonialsData.length > 0) setTestimonials(testimonialsData.map(mapDbTestimonial));
+        if (faqsData && faqsData.length > 0) setFaqs(faqsData.map(mapDbFaq));
+        if (policiesData && policiesData.length > 0) setPolicies(policiesData.map(mapDbPolicy));
+        if (pagesData && pagesData.length > 0) setCustomPages(pagesData.map(mapDbCustomPage));
+        if (guestEventsData && guestEventsData.length > 0) setGuestEvents(guestEventsData.map(mapDbGuestEvent));
+        if (coHostsData && coHostsData.length > 0) setCoHosts(coHostsData.map(mapDbCoHost));
+        if (mediaData && mediaData.length > 0) {
+          setManagedPhotos(mediaData.filter(m => m.media_type === 'photo').map(m => mapDbMedia(m) as ManagedPhoto));
+          setManagedVideos(mediaData.filter(m => m.media_type === 'video').map(m => mapDbMedia(m) as ManagedVideo));
         }
-
-        // 2. Fetch room categories
-        const { data: roomsData, error: roomsErr } = await supabase
-          .from('room_categories')
-          .select('*')
-          .order('updated_at', { ascending: true });
-
-        if (!roomsErr && roomsData && roomsData.length > 0) {
-          const mappedRooms: RoomType[] = roomsData.map(r => ({
-            id: r.id,
-            name: r.name,
-            description: r.description || '',
-            capacityAdults: r.capacity_adults,
-            capacityChildren: r.capacity_children,
-            basePrice: r.base_price,
-            totalInventory: r.total_inventory,
-            sizeSqft: 300,
-            bedType: '',
-            amenities: r.amenities || [],
-            photos: r.photos || [],
-            is_active: r.is_active,
-            beds: r.beds || {},
-            extra_beds: r.extra_beds || {},
-            price_tiers: r.price_tiers || {},
-            inventory_overrides: r.inventory_overrides || {},
-            rate_overrides: r.rate_overrides || {},
-            cancellation_policy_overrides: r.cancellation_policy_overrides || {},
-            min_occupancy: r.min_occupancy || 1,
-            base_occupancy: r.base_occupancy || r.capacity_adults
-          }));
-          setRooms(mappedRooms);
-        } else if (!roomsErr && (!roomsData || roomsData.length === 0)) {
-          // Seed default rooms to Supabase
-          const seedRooms = defaultRooms.map(r => ({
-            id: r.id,
-            name: r.name,
-            description: r.description,
-            capacity_adults: r.capacityAdults,
-            capacity_children: r.capacityChildren,
-            base_price: r.basePrice,
-            total_inventory: r.totalInventory,
-            min_occupancy: 1,
-            base_occupancy: r.capacityAdults,
-            beds: {},
-            extra_beds: {},
-            price_tiers: { '1': r.basePrice, '2': Math.round(r.basePrice * 1.15) },
-            amenities: r.amenities,
-            photos: r.photos,
-            is_active: true
-          }));
-          await supabase.from('room_categories').insert(seedRooms);
-        }
-
-        // 3. Fetch bookings
-        const { data: bookingsData } = await supabase
-          .from('bookings')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (bookingsData && bookingsData.length > 0) {
-          const mappedBookings: Booking[] = bookingsData.map(b => ({
-            id: b.id,
-            roomId: b.room_id || '',
-            roomName: b.room_name || '',
-            guestName: b.guest_name,
-            guestEmail: b.guest_email,
-            guestPhone: b.guest_phone || '',
-            checkIn: b.check_in,
-            checkOut: b.check_out,
-            totalPrice: Number(b.total_price),
-            paymentStatus: b.payment_status as any,
-            bookingStatus: b.booking_status as any,
-            addons: b.addons || [],
-            couponCode: b.coupon_code || '',
-            createdAt: b.created_at
-          }));
-          setBookings(mappedBookings);
+        if (messagesData && messagesData.length > 0) setMessages(messagesData.map(mapDbMessage));
+        if (eventLogsData && eventLogsData.length > 0) {
+          setEvents(eventLogsData.map(e => ({
+            id: e.id,
+            title: e.title,
+            description: e.description || '',
+            date: e.created_at?.slice(0, 16).replace('T', ' ') || '',
+            type: e.log_type as EventLog['type'],
+          })));
         }
       } catch (err) {
-        console.warn('Supabase offline or initial load skipped:', err);
+        console.warn('[Supabase] Initial load failed, using localStorage fallback:', err);
       }
     };
-
-    loadSupabaseData();
-  }, []);
-
-  // Sync changes of hotelInfo to Supabase
-  useEffect(() => {
-    const syncHotelInfo = async () => {
-      try {
-        await supabase.from('hotel_info').upsert({
-          id: 'myota',
-          name: hotelInfo.name,
-          address: hotelInfo.address,
-          description: hotelInfo.description,
-          cancellation_policy_type: hotelInfo.cancellationPolicyType || '2d',
-          non_refundable_discount_amount: hotelInfo.nonRefundableDiscountAmount || 0,
-          payment_collection_type: hotelInfo.paymentCollectionType || 'partial',
-          payment_collection_percent: hotelInfo.paymentCollectionPercent || 50,
-          raw_data: hotelInfo,
-          updated_at: new Date().toISOString()
-        });
-      } catch (err) {
-        console.warn('Supabase syncHotelInfo error:', err);
-      }
-    };
-    syncHotelInfo();
-  }, [hotelInfo]);
-
-  // Sync changes of rooms to Supabase
-  useEffect(() => {
-    const syncRooms = async () => {
-      try {
-        for (const room of rooms) {
-          await supabase.from('room_categories').upsert({
-            id: room.id,
-            name: room.name,
-            description: room.description,
-            capacity_adults: room.capacityAdults,
-            capacity_children: room.capacityChildren,
-            base_price: room.basePrice,
-            total_inventory: room.totalInventory,
-            min_occupancy: room.min_occupancy,
-            base_occupancy: room.base_occupancy,
-            beds: room.beds,
-            extra_beds: room.extra_beds,
-            price_tiers: room.price_tiers,
-            amenities: room.amenities,
-            photos: room.photos,
-            inventory_overrides: room.inventory_overrides,
-            rate_overrides: room.rate_overrides,
-            cancellation_policy_overrides: room.cancellation_policy_overrides,
-            is_active: room.is_active,
-            updated_at: new Date().toISOString()
-          });
-        }
-      } catch (err) {
-        console.warn('Supabase syncRooms error:', err);
-      }
-    };
-    syncRooms();
-  }, [rooms]);
+    loadAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePropertyId]);
 
   // Actions
   const addProperty = (name: string) => {
@@ -1052,12 +1151,13 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
     setBookings(prev => [newBooking, ...prev]);
-    addEventLog('New Booking Confirmed', `Reservation booked for ${bookingData.guestName} ($${bookingData.totalPrice})`, 'booking');
+    addEventLog('New Booking Confirmed', `Reservation booked for ${bookingData.guestName} (₹${bookingData.totalPrice})`, 'booking');
 
     try {
       await supabase.from('bookings').insert({
         id: newBooking.id,
-        room_id: newBooking.roomId,
+        property_id: activePropertyId,
+        room_id: newBooking.roomId || null,
         room_name: newBooking.roomName,
         guest_name: newBooking.guestName,
         guest_email: newBooking.guestEmail,
@@ -1068,11 +1168,10 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         payment_status: newBooking.paymentStatus,
         booking_status: newBooking.bookingStatus,
         addons: newBooking.addons,
-        coupon_code: newBooking.couponCode,
-        created_at: newBooking.createdAt
+        coupon_code: newBooking.couponCode || null,
       });
     } catch (err) {
-      console.warn('Supabase addBooking error:', err);
+      console.warn('[Supabase] addBooking error:', err);
     }
   };
 
@@ -1082,107 +1181,243 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await supabase
         .from('bookings')
         .update({ booking_status: 'cancelled' })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('property_id', activePropertyId);
     } catch (err) {
-      console.warn('Supabase cancelBooking error:', err);
+      console.warn('[Supabase] cancelBooking error:', err);
     }
   };
 
-  const addAddon = (addon: Omit<Addon, 'id'>) => {
-    setAddons(prev => [...prev, { ...addon, id: `addon-${Date.now()}` }]);
+  // --- Per-Entity CRUD with Supabase Sync ---
+
+  const addAddon = async (addon: Omit<Addon, 'id'>) => {
+    const id = `addon-${Date.now()}`;
+    const newAddon = { ...addon, id };
+    setAddons(prev => [...prev, newAddon]);
+    try {
+      await supabase.from('addons').insert({
+        id, property_id: activePropertyId,
+        name: addon.name, description: addon.description, price: addon.price,
+        image: addon.image || null, pricing_type: addon.pricingType || 'single_event',
+      });
+    } catch (err) { console.warn('[Supabase] addAddon:', err); }
   };
 
-  const updateAddon = (id: string, addonData: Partial<Addon>) => {
+  const updateAddon = async (id: string, addonData: Partial<Addon>) => {
     setAddons(prev => prev.map(a => a.id === id ? { ...a, ...addonData } : a));
+    try {
+      await supabase.from('addons').update({
+        name: addonData.name, description: addonData.description,
+        price: addonData.price, image: addonData.image || null,
+        pricing_type: addonData.pricingType,
+      }).eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateAddon:', err); }
   };
 
-  const deleteAddon = (id: string) => {
+  const deleteAddon = async (id: string) => {
     setAddons(prev => prev.filter(a => a.id !== id));
+    try {
+      await supabase.from('addons').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteAddon:', err); }
   };
 
-  const addCoupon = (coupon: Omit<Coupon, 'id'>) => {
-    setCoupons(prev => [...prev, { ...coupon, id: `coupon-${Date.now()}` }]);
+  const addCoupon = async (coupon: Omit<Coupon, 'id'>) => {
+    const id = `coupon-${Date.now()}`;
+    setCoupons(prev => [...prev, { ...coupon, id }]);
+    try {
+      await supabase.from('coupons').insert({
+        id, property_id: activePropertyId,
+        code: coupon.code, discount_type: coupon.discountType,
+        discount_value: coupon.discountValue, active: coupon.active,
+      });
+    } catch (err) { console.warn('[Supabase] addCoupon:', err); }
   };
 
-  const updateCoupon = (id: string, couponData: Partial<Coupon>) => {
+  const updateCoupon = async (id: string, couponData: Partial<Coupon>) => {
     setCoupons(prev => prev.map(c => c.id === id ? { ...c, ...couponData } : c));
+    try {
+      await supabase.from('coupons').update({
+        code: couponData.code, discount_type: couponData.discountType,
+        discount_value: couponData.discountValue, active: couponData.active,
+      }).eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateCoupon:', err); }
   };
 
-  const deleteCoupon = (id: string) => {
+  const deleteCoupon = async (id: string) => {
     setCoupons(prev => prev.filter(c => c.id !== id));
+    try {
+      await supabase.from('coupons').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteCoupon:', err); }
   };
 
-  const addTestimonial = (testimonial: Omit<Testimonial, 'id'>) => {
-    setTestimonials(prev => [{ ...testimonial, id: `test-${Date.now()}` }, ...prev]);
+  const addTestimonial = async (testimonial: Omit<Testimonial, 'id'>) => {
+    const id = `test-${Date.now()}`;
+    setTestimonials(prev => [{ ...testimonial, id }, ...prev]);
+    try {
+      await supabase.from('testimonials').insert({
+        id, property_id: activePropertyId,
+        author: testimonial.author, content: testimonial.content,
+        rating: testimonial.rating, stay_date: testimonial.stayDate || null,
+        avatar_url: testimonial.avatarUrl || null,
+      });
+    } catch (err) { console.warn('[Supabase] addTestimonial:', err); }
   };
 
-  const deleteTestimonial = (id: string) => {
+  const deleteTestimonial = async (id: string) => {
     setTestimonials(prev => prev.filter(t => t.id !== id));
+    try {
+      await supabase.from('testimonials').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteTestimonial:', err); }
   };
 
-  const addFAQ = (faq: Omit<FAQ, 'id'>) => {
-    setFaqs(prev => [...prev, { ...faq, id: `faq-${Date.now()}` }]);
+  const addFAQ = async (faq: Omit<FAQ, 'id'>) => {
+    const id = `faq-${Date.now()}`;
+    setFaqs(prev => [...prev, { ...faq, id }]);
+    try {
+      await supabase.from('faqs').insert({ id, property_id: activePropertyId, question: faq.question, answer: faq.answer });
+    } catch (err) { console.warn('[Supabase] addFAQ:', err); }
   };
 
-  const updateFAQ = (id: string, faqData: Partial<FAQ>) => {
+  const updateFAQ = async (id: string, faqData: Partial<FAQ>) => {
     setFaqs(prev => prev.map(f => f.id === id ? { ...f, ...faqData } : f));
+    try {
+      await supabase.from('faqs').update({ question: faqData.question, answer: faqData.answer })
+        .eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateFAQ:', err); }
   };
 
-  const deleteFAQ = (id: string) => {
+  const deleteFAQ = async (id: string) => {
     setFaqs(prev => prev.filter(f => f.id !== id));
+    try {
+      await supabase.from('faqs').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteFAQ:', err); }
   };
 
-  const addPolicy = (policy: Omit<Policy, 'id'>) => {
-    setPolicies(prev => [...prev, { ...policy, id: `pol-${Date.now()}` }]);
+  const addPolicy = async (policy: Omit<Policy, 'id'>) => {
+    const id = `pol-${Date.now()}`;
+    setPolicies(prev => [...prev, { ...policy, id }]);
+    try {
+      await supabase.from('policies').insert({ id, property_id: activePropertyId, title: policy.title, description: policy.description });
+    } catch (err) { console.warn('[Supabase] addPolicy:', err); }
   };
 
-  const updatePolicy = (id: string, policyData: Partial<Policy>) => {
+  const updatePolicy = async (id: string, policyData: Partial<Policy>) => {
     setPolicies(prev => prev.map(p => p.id === id ? { ...p, ...policyData } : p));
+    try {
+      await supabase.from('policies').update({ title: policyData.title, description: policyData.description })
+        .eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updatePolicy:', err); }
   };
 
-  const deletePolicy = (id: string) => {
+  const deletePolicy = async (id: string) => {
     setPolicies(prev => prev.filter(p => p.id !== id));
+    try {
+      await supabase.from('policies').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deletePolicy:', err); }
   };
 
-  const addCustomPage = (page: Omit<CustomPage, 'id'>) => {
-    setCustomPages(prev => [...prev, { ...page, id: `page-${Date.now()}` }]);
+  const addCustomPage = async (page: Omit<CustomPage, 'id'>) => {
+    const id = `page-${Date.now()}`;
+    setCustomPages(prev => [...prev, { ...page, id }]);
+    try {
+      await supabase.from('custom_pages').insert({
+        id, property_id: activePropertyId,
+        title: page.title, slug: page.slug, content: page.content, active: page.active,
+        page_type: page.type || 'custom', banner_image: page.bannerImage || null,
+        tagline: page.tagline || null,
+        restaurant_menu: (page.restaurantMenu as any) || [],
+        banquet_capacity: page.banquetCapacity || null,
+        banquet_features: page.banquetFeatures || [],
+        blog_posts: (page.blogPosts as any) || [],
+        activities_list: (page.activitiesList as any) || [],
+      });
+    } catch (err) { console.warn('[Supabase] addCustomPage:', err); }
   };
 
-  const updateCustomPage = (id: string, pageData: Partial<CustomPage>) => {
+  const updateCustomPage = async (id: string, pageData: Partial<CustomPage>) => {
     setCustomPages(prev => prev.map(p => p.id === id ? { ...p, ...pageData } : p));
+    try {
+      await supabase.from('custom_pages').update({
+        title: pageData.title, slug: pageData.slug, content: pageData.content,
+        active: pageData.active, page_type: pageData.type,
+        banner_image: pageData.bannerImage || null, tagline: pageData.tagline || null,
+        restaurant_menu: (pageData.restaurantMenu as any),
+        banquet_capacity: pageData.banquetCapacity || null,
+        banquet_features: pageData.banquetFeatures,
+        blog_posts: (pageData.blogPosts as any),
+        activities_list: (pageData.activitiesList as any),
+      }).eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateCustomPage:', err); }
   };
 
-  const deleteCustomPage = (id: string) => {
+  const deleteCustomPage = async (id: string) => {
     setCustomPages(prev => prev.filter(p => p.id !== id));
+    try {
+      await supabase.from('custom_pages').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteCustomPage:', err); }
   };
 
-  const addGuestEvent = (evt: Omit<GuestEvent, 'id'>) => {
-    setGuestEvents(prev => [...prev, { ...evt, id: `evt-${Date.now()}` }]);
+  const addGuestEvent = async (evt: Omit<GuestEvent, 'id'>) => {
+    const id = `evt-${Date.now()}`;
+    setGuestEvents(prev => [...prev, { ...evt, id }]);
+    try {
+      await supabase.from('guest_events').insert({
+        id, property_id: activePropertyId,
+        title: evt.title, category: evt.category, description: evt.description,
+        image: evt.image, from_date: evt.fromDate, to_date: evt.toDate,
+        time: evt.time, price: evt.price, capacity: evt.capacity,
+      });
+    } catch (err) { console.warn('[Supabase] addGuestEvent:', err); }
   };
 
-  const updateGuestEvent = (id: string, evtData: Partial<GuestEvent>) => {
+  const updateGuestEvent = async (id: string, evtData: Partial<GuestEvent>) => {
     setGuestEvents(prev => prev.map(e => e.id === id ? { ...e, ...evtData } : e));
+    try {
+      await supabase.from('guest_events').update({
+        title: evtData.title, category: evtData.category, description: evtData.description,
+        image: evtData.image, from_date: evtData.fromDate, to_date: evtData.toDate,
+        time: evtData.time, price: evtData.price, capacity: evtData.capacity,
+      }).eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateGuestEvent:', err); }
   };
 
-  const deleteGuestEvent = (id: string) => {
+  const deleteGuestEvent = async (id: string) => {
     setGuestEvents(prev => prev.filter(e => e.id !== id));
+    try {
+      await supabase.from('guest_events').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteGuestEvent:', err); }
   };
 
-  const markMessageRead = (id: string) => {
+  const markMessageRead = async (id: string) => {
     setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
+    try {
+      await supabase.from('guest_messages').update({ is_read: true })
+        .eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] markMessageRead:', err); }
   };
 
-  const deleteMessage = (id: string) => {
+  const deleteMessage = async (id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
+    try {
+      await supabase.from('guest_messages').update({ archived: true })
+        .eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteMessage:', err); }
   };
 
   const setTemplate = (template: 'luxury' | 'organic' | 'editorial' | 'artdeco' | 'pastel') => {
     setTemplateState(template);
   };
 
-  const addEventLog = (title: string, description: string, type: 'booking' | 'channel' | 'info') => {
+  const addEventLog = async (title: string, description: string, type: 'booking' | 'channel' | 'info') => {
+    const id = `evt-${Date.now()}`;
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    setEvents(prev => [{ id: `evt-${Date.now()}`, title, description, date: timestamp, type }, ...prev].slice(0, 50));
+    setEvents(prev => [{ id, title, description, date: timestamp, type }, ...prev].slice(0, 50));
+    try {
+      await supabase.from('event_logs').insert({
+        id, property_id: activePropertyId,
+        title, description, log_type: type,
+      });
+    } catch (err) { console.warn('[Supabase] addEventLog:', err); }
   };
 
   return (
@@ -1257,36 +1492,83 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       addEventLog,
       // Co-hosts
       coHosts,
-      addCoHost: (host: Omit<CoHost, 'id'>) => {
-        setCoHosts(prev => [...prev, { ...host, id: `host-${Date.now()}` }]);
+      addCoHost: async (host: Omit<CoHost, 'id'>) => {
+        const id = `host-${Date.now()}`;
+        setCoHosts(prev => [...prev, { ...host, id }]);
+        try {
+          await supabase.from('co_hosts').insert({
+            id, property_id: activePropertyId,
+            name: host.name, phone: host.phone, role: host.role,
+            can_receive_calls: host.canReceiveCalls, can_accept_bookings: host.canAcceptBookings,
+          });
+        } catch (err) { console.warn('[Supabase] addCoHost:', err); }
       },
-      updateCoHost: (id: string, host: Partial<CoHost>) => {
+      updateCoHost: async (id: string, host: Partial<CoHost>) => {
         setCoHosts(prev => prev.map(h => h.id === id ? { ...h, ...host } : h));
+        try {
+          await supabase.from('co_hosts').update({
+            name: host.name, phone: host.phone, role: host.role,
+            can_receive_calls: host.canReceiveCalls, can_accept_bookings: host.canAcceptBookings,
+          }).eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] updateCoHost:', err); }
       },
-      deleteCoHost: (id: string) => {
+      deleteCoHost: async (id: string) => {
         setCoHosts(prev => prev.filter(h => h.id !== id));
+        try {
+          await supabase.from('co_hosts').delete().eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] deleteCoHost:', err); }
       },
       // Managed Photos
       managedPhotos,
-      addManagedPhoto: (photo: Omit<ManagedPhoto, 'id'>) => {
-        setManagedPhotos(prev => [...prev, { ...photo, id: `photo-${Date.now()}` }]);
+      addManagedPhoto: async (photo: Omit<ManagedPhoto, 'id'>) => {
+        const id = `photo-${Date.now()}`;
+        setManagedPhotos(prev => [...prev, { ...photo, id }]);
+        try {
+          await supabase.from('media_library').insert({
+            id, property_id: activePropertyId,
+            url: photo.url, media_type: 'photo', tags: photo.tags, is_hero: photo.isHero,
+          });
+        } catch (err) { console.warn('[Supabase] addManagedPhoto:', err); }
       },
-      updateManagedPhoto: (id: string, photo: Partial<ManagedPhoto>) => {
+      updateManagedPhoto: async (id: string, photo: Partial<ManagedPhoto>) => {
         setManagedPhotos(prev => prev.map(p => p.id === id ? { ...p, ...photo } : p));
+        try {
+          await supabase.from('media_library').update({
+            tags: photo.tags, is_hero: photo.isHero, url: photo.url,
+          }).eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] updateManagedPhoto:', err); }
       },
-      deleteManagedPhoto: (id: string) => {
+      deleteManagedPhoto: async (id: string) => {
         setManagedPhotos(prev => prev.filter(p => p.id !== id));
+        try {
+          await supabase.from('media_library').delete().eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] deleteManagedPhoto:', err); }
       },
       // Managed Videos
       managedVideos,
-      addManagedVideo: (video: Omit<ManagedVideo, 'id'>) => {
-        setManagedVideos(prev => [...prev, { ...video, id: `video-${Date.now()}` }]);
+      addManagedVideo: async (video: Omit<ManagedVideo, 'id'>) => {
+        const id = `video-${Date.now()}`;
+        setManagedVideos(prev => [...prev, { ...video, id }]);
+        try {
+          await supabase.from('media_library').insert({
+            id, property_id: activePropertyId,
+            url: video.url, media_type: 'video', tags: video.tags, is_hero: video.isHero,
+          });
+        } catch (err) { console.warn('[Supabase] addManagedVideo:', err); }
       },
-      updateManagedVideo: (id: string, video: Partial<ManagedVideo>) => {
+      updateManagedVideo: async (id: string, video: Partial<ManagedVideo>) => {
         setManagedVideos(prev => prev.map(v => v.id === id ? { ...v, ...video } : v));
+        try {
+          await supabase.from('media_library').update({
+            tags: video.tags, is_hero: video.isHero, url: video.url,
+          }).eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] updateManagedVideo:', err); }
       },
-      deleteManagedVideo: (id: string) => {
+      deleteManagedVideo: async (id: string) => {
         setManagedVideos(prev => prev.filter(v => v.id !== id));
+        try {
+          await supabase.from('media_library').delete().eq('id', id).eq('property_id', activePropertyId);
+        } catch (err) { console.warn('[Supabase] deleteManagedVideo:', err); }
       },
     }}>
       {children}
