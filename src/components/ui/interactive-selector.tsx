@@ -7,12 +7,22 @@ interface RoomData {
   description: string;
   photos: string[];
   basePrice: number;
+  price_tiers?: Record<string, number>;
   bedType: string;
   sizeSqft: number;
   capacityAdults?: number;
   amenities?: string[];
   totalInventory?: number;
 }
+
+/** Returns the lowest price across all tiers, or basePrice if no tiers exist. */
+const getLowestPrice = (room: RoomData): number => {
+  if (!room.price_tiers || Object.keys(room.price_tiers).length === 0) {
+    return room.basePrice;
+  }
+  const tierValues = Object.values(room.price_tiers).map(Number).filter(v => v > 0);
+  return tierValues.length > 0 ? Math.min(...tierValues) : room.basePrice;
+};
 
 interface InteractiveSelectorProps {
   rooms?: RoomData[];
@@ -186,7 +196,8 @@ const RoomCard: React.FC<{
         <div className="border-t border-gray-100 pt-3 mt-auto flex items-center justify-between gap-2">
           <div>
             <div className="flex items-baseline gap-0.5">
-              <span className="text-[17px] font-bold text-[#3D405B]">₹{room.basePrice.toLocaleString('en-IN')}</span>
+              <span className="text-[10px] text-gray-400 font-medium mr-0.5">from</span>
+              <span className="text-[17px] font-bold text-[#3D405B]">₹{getLowestPrice(room).toLocaleString('en-IN')}</span>
               <span className="text-[11px] text-gray-400 font-medium">/night</span>
             </div>
             <div className="text-[9px] text-gray-400">taxes may apply</div>

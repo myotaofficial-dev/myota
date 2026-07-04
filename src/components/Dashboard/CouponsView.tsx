@@ -189,8 +189,8 @@ export const CouponsView: React.FC = () => {
                     type="number"
                     required
                     min={1}
-                    value={discountValue}
-                    onChange={(e) => setDiscountValue(Number(e.target.value))}
+                    value={discountValue === 0 ? '' : discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="ds-input w-full"
                   />
                 </div>

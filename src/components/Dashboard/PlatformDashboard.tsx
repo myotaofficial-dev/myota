@@ -4,9 +4,11 @@ import {
   Plus, Calendar, DollarSign, CheckCircle2, Clock, Wallet, Users,
   BarChart3, LayoutDashboard, CalendarRange, Link, CalendarOff, LogOut,
   ChevronRight, ArrowLeft, Layers, Home, MapPin, Star, AlertCircle,
-  Check, Loader2, Globe, ExternalLink
+  Check, Loader2, Globe, Trash2
 } from 'lucide-react';
 import { searchPlaces, getPlaceDetails, type PlaceCandidate, type PlaceDetails } from '../../services/PlacesService';
+import { supabase } from '../../lib/supabaseClient';
+import { uploadMediaFile } from '../../services/StorageService';
 
 // ─── Onboarding modes ────────────────────────────────────────────────────────
 type OnboardingStep = 'type' | 'search' | 'confirm';
@@ -121,8 +123,27 @@ const OnboardingSplit: React.FC<{
 export const PlatformDashboard: React.FC = () => {
   const {
     propertiesList, addPropertyWithDetails, setAppMode, setActivePropertyId,
-    bookings, setSelectedView, updateHotelInfo, addTestimonial
+    bookings, setSelectedView, updateHotelInfo, deleteProperty
   } = useHotel();
+
+  // Dynamic user profile from onboarding localStorage
+  const userName = localStorage.getItem('myota_user_name') || 'Yugandhar raj';
+  const firstName = userName.split(' ')[0];
+  const initials = userName.split(' ').map((n: string) => n[0] || '').join('').toUpperCase().slice(0, 2) || 'YR';
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[Supabase Auth] Sign out failed:', err);
+    }
+    localStorage.removeItem('myota_onboarded');
+    localStorage.removeItem('myota_owner_id');
+    localStorage.removeItem('myota_user_name');
+    localStorage.removeItem('myota_user_email');
+    localStorage.removeItem('myota_user_phone');
+    setAppMode('landing');
+  };
 
   // Onboarding state
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -130,6 +151,8 @@ export const PlatformDashboard: React.FC = () => {
   const [propType, setPropType] = useState<PropertyType>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
+  const [propertyToDelete, setPropertyToDelete] = useState<{ id: string, name: string } | null>(null);
+  const [creatingStatus, setCreatingStatus] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<PlaceCandidate | null>(null);
@@ -211,11 +234,82 @@ export const PlatformDashboard: React.FC = () => {
     }
   };
 
-  const handleConfirmAndCreate = () => {
+  const handleConfirmAndCreate = async () => {
     if (!placeDetails) return;
 
-    // 1. Create property record with basic details
-    addPropertyWithDetails({
+    setCreatingStatus("Initializing Dhanvanth's premium hotel storefront...");
+
+    // 1. Download, convert to WebP, and upload Google Place photos (maximum of 5 to keep setup fast)
+    const uploadedUrls: string[] = [];
+    if (placeDetails.photos && placeDetails.photos.length > 0) {
+      const photosToIngest = placeDetails.photos.slice(0, 5);
+      const totalPhotos = photosToIngest.length;
+
+      for (let i = 0; i < totalPhotos; i++) {
+        const rawUrl = photosToIngest[i];
+        setCreatingStatus(`Downloading and converting photo ${i + 1} of ${totalPhotos} to WebP...`);
+        
+        try {
+          // Fetch raw image blob
+          const response = await fetch(rawUrl);
+          const blob = await response.blob();
+          
+          // Draw on Canvas and compress to WebP blob
+          const webpUrl = await new Promise<string>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let width = img.width;
+              let height = img.height;
+              const maxDim = 1200; // Optimum resolution
+
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(async (webpBlob) => {
+                  if (webpBlob) {
+                    try {
+                      const publicUrl = await uploadMediaFile(webpBlob, `google_photo_${Date.now()}_${i + 1}.webp`);
+                      resolve(publicUrl);
+                    } catch (uploadErr) {
+                      reject(uploadErr);
+                    }
+                  } else {
+                    reject(new Error('Canvas blob conversion failed'));
+                  }
+                }, 'image/webp', 0.8);
+              } else {
+                reject(new Error('Canvas context failed'));
+              }
+            };
+            img.onerror = () => reject(new Error('Image failed to load'));
+            img.src = URL.createObjectURL(blob);
+          });
+          uploadedUrls.push(webpUrl);
+        } catch (fetchErr) {
+          console.warn(`[Ingestion] Photo ${i + 1} fallback to original URL due to CORS/Fetch error:`, fetchErr);
+          uploadedUrls.push(rawUrl); // Fallback to raw Google Place URL directly
+        }
+      }
+    }
+
+    setCreatingStatus("Saving room category structures & client reviews...");
+
+    // 2. Create property record with basic details and seeded photos
+    await addPropertyWithDetails({
       name: placeDetails.name,
       location: placeDetails.formattedAddress,
       phone: placeDetails.phone,
@@ -223,9 +317,17 @@ export const PlatformDashboard: React.FC = () => {
       description: placeDetails.description,
       amenities: [],
       googleBusinessName: selectedCandidate?.displayName ?? '',
+      photos: uploadedUrls,
+      reviews: placeDetails.reviews.map(r => ({
+        author: r.author,
+        text: r.text,
+        rating: r.rating
+      })),
+      latitude: placeDetails.location?.latitude,
+      longitude: placeDetails.location?.longitude,
     });
 
-    // 2. Pre-fill hotelInfo with all Google data (photos → heroImages, rating, location, etc.)
+    // 3. Pre-fill hotelInfo with all Google data (photos → heroImages, rating, location, etc.)
     updateHotelInfo({
       name: placeDetails.name,
       address: placeDetails.formattedAddress,
@@ -234,25 +336,14 @@ export const PlatformDashboard: React.FC = () => {
       tagline: placeDetails.description ? placeDetails.description.slice(0, 90) : '',
       latitude: placeDetails.location?.latitude ?? 0,
       longitude: placeDetails.location?.longitude ?? 0,
-      heroImages: placeDetails.photos.length > 0 ? placeDetails.photos : [],
+      heroImages: uploadedUrls.length > 0 ? uploadedUrls : [],
       starRating: Math.round(placeDetails.rating) || 4,
       googleBusinessName: selectedCandidate?.displayName ?? '',
     });
 
-    // 3. Seed testimonials from Google reviews (replace with real guest voices)
-    if (placeDetails.reviews.length > 0) {
-      placeDetails.reviews.forEach((review, i) => {
-        if (review.text.trim()) {
-          addTestimonial({
-            author: review.author,
-            content: review.text,
-            rating: review.rating,
-            stayDate: new Date(Date.now() - i * 86400000 * 30).toISOString().split('T')[0],
-          });
-        }
-      });
-    }
 
+
+    setCreatingStatus(null);
     closeOnboarding();
     setSelectedView('property');
     setAppMode('editor');
@@ -311,14 +402,28 @@ export const PlatformDashboard: React.FC = () => {
             <h3 className="ds-overline px-3">Properties</h3>
             <ul className="space-y-1">
               {propertiesList.map(prop => (
-                <li key={prop.id}>
-                  <button
-                    onClick={() => handleSelectProperty(prop.id, prop.name)}
-                    className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl hover:bg-[#FAFAF9] text-left transition group"
-                  >
-                    <span className="text-xs font-semibold truncate max-w-[130px]" style={{ color: 'var(--ds-text-primary)' }}>{prop.name}</span>
-                    <span className="ds-badge ds-badge-teal">{prop.status}</span>
-                  </button>
+                <li key={prop.id} className="relative group">
+                  <div className="flex items-center justify-between w-full rounded-xl hover:bg-[#FAFAF9] transition">
+                    <button
+                      onClick={() => handleSelectProperty(prop.id, prop.name)}
+                      className="flex-1 flex items-center justify-between px-3.5 py-2 text-left truncate cursor-pointer"
+                    >
+                      <span className="text-xs font-semibold truncate max-w-[110px]" style={{ color: 'var(--ds-text-primary)' }}>{prop.name}</span>
+                      <span className="ds-badge ds-badge-teal uppercase shrink-0 text-[9px] px-1.5 py-0.5">{prop.status}</span>
+                    </button>
+                    
+                    {/* Delete button (only visible on hover or mobile) */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPropertyToDelete({ id: prop.id, name: prop.name });
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-400 hover:text-red-650 rounded-lg transition mr-1 cursor-pointer shrink-0"
+                      title={`Delete ${prop.name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -336,90 +441,125 @@ export const PlatformDashboard: React.FC = () => {
         {/* Footer */}
         <div className="p-4 border-t flex items-center justify-between" style={{ borderColor: 'var(--ds-border)', background: '#FAFAF9' }}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: 'var(--ds-primary-subtle)', color: 'var(--ds-primary)' }}>YR</div>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'var(--ds-primary)' }}>
+              {initials}
+            </div>
             <div>
-              <h4 className="font-bold text-xs leading-none" style={{ color: 'var(--ds-text-primary)' }}>Yugandhar raj</h4>
+              <h4 className="font-bold text-xs leading-none" style={{ color: 'var(--ds-text-primary)' }}>{userName}</h4>
               <span className="text-[10px] font-semibold block mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Manager Account</span>
             </div>
           </div>
-          <button className="transition" style={{ color: 'var(--ds-text-muted)' }} title="Log Out"><LogOut className="w-4 h-4" /></button>
+          <button 
+            onClick={handleLogout}
+            className="transition hover:text-red-500 cursor-pointer" 
+            style={{ color: 'var(--ds-text-muted)' }} 
+            title="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
       {/* ── Main Content ───────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Morning, Yugandhar</h2>
-          <p className="text-sm mt-1 font-medium" style={{ color: 'var(--ds-text-secondary)' }}>See your bookings, visitors, and revenue at a glance</p>
-        </div>
-
-        {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {statCards.map(({ label, value, badge, icon: Icon, iconBg, iconColor }) => (
-            <div key={label} className="bg-white p-5 rounded-2xl border relative flex flex-col justify-between h-32" style={{ borderColor: 'var(--ds-border)' }}>
-              <div>
-                <span className="ds-overline block">{label}</span>
-                <p className="text-2xl font-black mt-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>{value}</p>
-              </div>
-              <span className="ds-badge ds-badge-teal w-max">{badge}</span>
-              <div className="absolute top-5 right-5 p-2 rounded-full" style={{ background: iconBg, color: iconColor }}>
-                <Icon className="w-4 h-4" />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Chart Panel */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-3 bg-white p-6 rounded-2xl border space-y-6" style={{ borderColor: 'var(--ds-border)' }}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-extrabold" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Bookings and revenue over time</h3>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Track room demand, revenue movement, and conversions.</p>
-              </div>
-              <div className="flex p-0.5 rounded-lg border" style={{ background: '#F5F5F4', borderColor: 'var(--ds-border)' }}>
-                {(['lifetime', '30days', 'month', 'lastmonth'] as const).map(p => (
-                  <button key={p} onClick={() => setChartPeriod(p)}
-                    className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition ${chartPeriod === p ? 'bg-[#1C1917] text-white shadow-sm' : 'text-[#78716C] hover:text-[#1C1917]'}`}>
-                    {p === 'lifetime' ? 'Lifetime' : p === '30days' ? '30 Days' : p === 'month' ? 'This Month' : 'Last Month'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-56 relative rounded-xl overflow-hidden flex flex-col justify-between p-4" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
-              <div className="absolute left-4 top-4 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹40,000</div>
-              <div className="absolute left-4 top-24 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹20,000</div>
-              <div className="absolute left-4 bottom-14 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹0</div>
-              <div className="w-full h-full flex flex-col justify-between pointer-events-none absolute inset-0 py-8 px-12 opacity-40">
-                <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-                <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-                <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-              </div>
-              <svg className="w-full h-full absolute inset-0 px-12 py-8 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1B93A4" stopOpacity="0.15" />
-                    <stop offset="100%" stopColor="#1B93A4" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50 L 100,100 L 0,100 Z" fill="url(#chartGradient)" />
-                <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50" fill="none" stroke="#1B93A4" strokeWidth="2.5" strokeLinecap="round" />
+      {propertiesList.length === 0 ? (
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col justify-center items-center text-center space-y-6">
+          <div className="max-w-md space-y-5">
+            <div className="w-16 h-16 rounded-2xl bg-[#1B93A4]/10 text-[#1B93A4] flex items-center justify-center mx-auto shadow-xs">
+              <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
+                <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
               </svg>
-              <div className="mt-auto w-full flex justify-between text-[10px] font-bold px-8 z-10 pt-4 border-t bg-white" style={{ color: 'var(--ds-text-muted)', borderColor: 'var(--ds-border)' }}>
-                {['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'].map(m => <span key={m}>{m}</span>)}
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>
+                Welcome, {firstName}!
+              </h2>
+              <p className="text-sm text-[#78716C] leading-relaxed max-w-sm mx-auto">
+                Let's launch your hotel, resort, or homestay's digital storefront. Create your first property to get started.
+              </p>
+            </div>
+            <button
+              onClick={openOnboarding}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-[#1C1917] hover:bg-zinc-800 text-white rounded-xl font-bold text-xs tracking-wider uppercase transition shadow-md cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Create Your First Property
+            </button>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+          <div>
+            <h2 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Morning, {firstName}</h2>
+            <p className="text-sm mt-1 font-medium" style={{ color: 'var(--ds-text-secondary)' }}>See your bookings, visitors, and revenue at a glance</p>
+          </div>
+
+          {/* Stat Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {statCards.map(({ label, value, badge, icon: Icon, iconBg, iconColor }) => (
+              <div key={label} className="bg-white p-5 rounded-2xl border relative flex flex-col justify-between h-32" style={{ borderColor: 'var(--ds-border)' }}>
+                <div>
+                  <span className="ds-overline block">{label}</span>
+                  <p className="text-2xl font-black mt-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>{value}</p>
+                </div>
+                <span className="ds-badge ds-badge-teal w-max">{badge}</span>
+                <div className="absolute top-5 right-5 p-2 rounded-full" style={{ background: iconBg, color: iconColor }}>
+                  <Icon className="w-4 h-4" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Chart Panel */}
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <div className="xl:col-span-3 bg-white p-6 rounded-2xl border space-y-6" style={{ borderColor: 'var(--ds-border)' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-extrabold" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Bookings and revenue over time</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Track room demand, revenue movement, and conversions.</p>
+                </div>
+                <div className="flex p-0.5 rounded-lg border" style={{ background: '#F5F5F4', borderColor: 'var(--ds-border)' }}>
+                  {(['lifetime', '30days', 'month', 'lastmonth'] as const).map(p => (
+                    <button key={p} onClick={() => setChartPeriod(p)}
+                      className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition ${chartPeriod === p ? 'bg-[#1C1917] text-white shadow-sm' : 'text-[#78716C] hover:text-[#1C1917]'}`}>
+                      {p === 'lifetime' ? 'Lifetime' : p === '30days' ? '30 Days' : p === 'month' ? 'This Month' : 'Last Month'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="h-56 relative rounded-xl overflow-hidden flex flex-col justify-between p-4" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
+                <div className="absolute left-4 top-4 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹40,000</div>
+                <div className="absolute left-4 top-24 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹20,000</div>
+                <div className="absolute left-4 bottom-14 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹0</div>
+                <div className="w-full h-full flex flex-col justify-between pointer-events-none absolute inset-0 py-8 px-12 opacity-40">
+                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                </div>
+                <svg className="w-full h-full absolute inset-0 px-12 py-8 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#1B93A4" stopOpacity="0.15" />
+                      <stop offset="100%" stopColor="#1B93A4" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50 L 100,100 L 0,100 Z" fill="url(#chartGradient)" />
+                  <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50" fill="none" stroke="#1B93A4" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                <div className="mt-auto w-full flex justify-between text-[10px] font-bold px-8 z-10 pt-4 border-t bg-white" style={{ color: 'var(--ds-text-muted)', borderColor: 'var(--ds-border)' }}>
+                  {['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'].map(m => <span key={m}>{m}</span>)}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border flex flex-col justify-between min-h-[250px]" style={{ borderColor: 'var(--ds-border)' }}>
-            <div>
-              <span className="ds-overline block">Total Visitors</span>
-              <h4 className="text-5xl font-black mt-4" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>29</h4>
-              <p className="text-xs mt-2 font-medium" style={{ color: 'var(--ds-text-muted)' }}>Unique views across platform sites.</p>
+            <div className="bg-white p-6 rounded-2xl border flex flex-col justify-between min-h-[250px]" style={{ borderColor: 'var(--ds-border)' }}>
+              <div>
+                <span className="ds-overline block">Total Visitors</span>
+                <h4 className="text-5xl font-black mt-4" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>29</h4>
+                <p className="text-xs mt-2 font-medium" style={{ color: 'var(--ds-text-muted)' }}>Unique views across platform sites.</p>
+              </div>
+              <span className="ds-badge ds-badge-teal w-max flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Lifetime Total</span>
             </div>
-            <span className="ds-badge ds-badge-teal w-max flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Lifetime Total</span>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════
           FULL-PAGE ONBOARDING OVERLAY
@@ -696,6 +836,68 @@ export const PlatformDashboard: React.FC = () => {
           )}
 
         </OnboardingSplit>
+      )}
+
+      {/* Property Delete Confirmation Modal */}
+      {propertyToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative text-left border border-zinc-200">
+            <h3 className="text-lg font-bold text-zinc-950 font-sans" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Delete Property?
+            </h3>
+            <p className="text-xs text-zinc-500 mt-2 font-sans leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-zinc-800">"{propertyToDelete.name}"</strong>? This will permanently delete all room types, pricing settings, bookings, testimonials, and media files. This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPropertyToDelete(null)}
+                className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await deleteProperty(propertyToDelete.id);
+                  setPropertyToDelete(null);
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer transition shadow-sm"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Property Ingestion Loader */}
+      {creatingStatus && (
+        <div className="fixed inset-0 bg-[#1C1917]/95 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-6 text-white text-center font-sans">
+          <div className="w-full max-w-sm flex flex-col items-center">
+            {/* Loader animation */}
+            <div className="relative w-20 h-20 mb-8 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-zinc-800"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-t-amber-500 animate-spin"></div>
+              <Globe className="w-8 h-8 text-amber-500 animate-pulse" />
+            </div>
+
+            <h3 className="text-xl font-bold tracking-tight mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Setting up your storefront
+            </h3>
+            <p className="text-xs text-zinc-400 max-w-xs leading-relaxed mb-6">
+              Please wait while we sync details and prepare your live preview canvas.
+            </p>
+
+            {/* Dynamic Status message */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 w-full flex items-center gap-3 shadow-inner">
+              <Loader2 className="w-4 h-4 text-amber-500 animate-spin shrink-0" />
+              <p className="text-[11px] font-bold tracking-wide text-zinc-300 text-left font-mono line-clamp-2">
+                {creatingStatus}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

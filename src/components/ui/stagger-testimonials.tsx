@@ -128,8 +128,10 @@ const TestimonialCard: React.FC<TestimonialCardProps> = ({
         "{testimonial.testimonial}"
       </h3>
       <p className={cn(
-        "absolute bottom-6 left-6 right-6 text-4xs font-bold tracking-wider uppercase text-left truncate border-t border-zinc-150 dark:border-zinc-800 pt-3",
-        isCenter ? "text-zinc-400" : "text-zinc-500"
+        "absolute bottom-6 left-6 right-6 text-[10px] font-sans font-medium tracking-wider uppercase text-left truncate border-t pt-3",
+        isCenter 
+          ? "text-zinc-400 border-zinc-700" 
+          : "text-zinc-500 border-zinc-150 dark:border-zinc-800"
       )}>
         — {testimonial.by}
       </p>
@@ -197,21 +199,38 @@ export const StaggerTestimonials: React.FC<StaggerTestimonialsProps> = ({
     setTestimonialsList(newList);
   };
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const updateSize = () => {
-      const { matches } = window.matchMedia("(min-width: 640px)");
-      setCardSize(matches ? 365 : 280);
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        if (containerWidth < 450) {
+          setCardSize(Math.max(260, containerWidth - 40));
+        } else {
+          setCardSize(365);
+        }
+      }
     };
 
     updateSize();
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
     window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
   }, []);
 
   if (testimonialsList.length === 0) return null;
 
   return (
     <div
+      ref={containerRef}
       className="relative w-full overflow-hidden bg-transparent"
       style={{ height: 480 }}
     >

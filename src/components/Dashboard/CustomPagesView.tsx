@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import type { CustomPage } from '../../context/HotelContext';
-import { Plus, Edit2, Trash2, X, Layout, FileText, ArrowRight, Save, Image, Link, Check, PlusCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Layout, Link, PlusCircle } from 'lucide-react';
 import { MediaUpload } from '../ui/MediaUpload';
 
 export const CustomPagesView: React.FC = () => {
@@ -346,8 +346,8 @@ export const CustomPagesView: React.FC = () => {
                                 placeholder="Price"
                                 required
                                 min={0}
-                                value={item.price}
-                                onChange={(e) => updateMenuItemRow(idx, 'price', Number(e.target.value))}
+                                value={item.price === 0 ? '' : item.price}
+                                onChange={(e) => updateMenuItemRow(idx, 'price', e.target.value === '' ? 0 : Number(e.target.value))}
                                 className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
                               />
                             </div>
@@ -382,8 +382,8 @@ export const CustomPagesView: React.FC = () => {
                       <input
                         type="number"
                         min={10}
-                        value={banquetCapacity}
-                        onChange={(e) => setBanquetCapacity(Number(e.target.value))}
+                        value={banquetCapacity === 0 ? '' : banquetCapacity}
+                        onChange={(e) => setBanquetCapacity(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 outline-hidden"
                       />
                     </div>

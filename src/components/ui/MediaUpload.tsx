@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, Image as ImageIcon, Film, Loader2 } from 'lucide-react';
+import { UploadCloud, X, Film, Loader2 } from 'lucide-react';
+import { uploadMediaFile } from '../../services/StorageService';
 
 interface MediaUploadProps {
   value: string;
@@ -25,10 +26,9 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     setIsLoading(true);
 
     const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
 
     if (isImage) {
-      // Compress and resize image using HTML5 Canvas to save localStorage space
+      // Compress and resize image using HTML5 Canvas to save storage space & convert to WebP
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
@@ -36,7 +36,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxDimension = 900;
+          const maxDimension = 1200; // Optimal HD resolution boundary
 
           if (width > maxDimension || height > maxDimension) {
             if (width > height) {
@@ -53,14 +53,30 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            // Export to JPEG with 0.75 quality (highly optimized base64)
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.75);
-            onChange(compressedBase64);
+            
+            // Export to WebP Blob (Default to compressed WebP at 0.8 quality)
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  // Upload WebP blob directly to Supabase Storage Bucket
+                  const publicUrl = await uploadMediaFile(blob, `${file.name.split('.')[0]}.webp`);
+                  onChange(publicUrl);
+                } catch (err: any) {
+                  console.warn('[Storage] WebP upload failed, falling back to base64:', err);
+                  // Fallback to offline base64 WebP if upload fails
+                  onChange(canvas.toDataURL('image/webp', 0.8));
+                }
+              } else {
+                // Fallback to jpeg base64 if toBlob fails
+                onChange(canvas.toDataURL('image/jpeg', 0.75));
+              }
+              setIsLoading(false);
+            }, 'image/webp', 0.8);
           } else {
             // Fallback to original read if canvas fails
             onChange(event.target?.result as string);
+            setIsLoading(false);
           }
-          setIsLoading(false);
         };
         img.onerror = () => {
           onChange(event.target?.result as string);
@@ -70,16 +86,24 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
       };
       reader.readAsDataURL(file);
     } else {
-      // For videos and other types, read directly as data URL
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        onChange(event.target?.result as string);
-        setIsLoading(false);
+      // For videos or other file formats, upload directly to Supabase Storage
+      const uploadDirect = async () => {
+        try {
+          const publicUrl = await uploadMediaFile(file, file.name);
+          onChange(publicUrl);
+        } catch (err) {
+          console.warn('[Storage] Video upload failed, loading as local Data URL:', err);
+          // Fallback to offline base64 Data URL
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            onChange(event.target?.result as string);
+          };
+          reader.readAsDataURL(file);
+        } finally {
+          setIsLoading(false);
+        }
       };
-      reader.onerror = () => {
-        setIsLoading(false);
-      };
-      reader.readAsDataURL(file);
+      uploadDirect();
     }
   };
 

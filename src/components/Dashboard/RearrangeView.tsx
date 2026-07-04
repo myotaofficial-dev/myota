@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import { LayoutGrid, ArrowUp, ArrowDown, Eye, EyeOff, Save, Check } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 
 const sectionLabels: Record<string, string> = {
   hero: "Hero Banner Section",
@@ -28,8 +29,8 @@ const menuLabels: Record<string, string> = {
 };
 
 export const RearrangeView: React.FC = () => {
-  const { hotelInfo, updateHotelInfo } = useHotel();
-  const [activeTab, setActiveTab] = useState<'sections' | 'menu'>('sections');
+  const { hotelInfo, updateHotelInfo, rooms, setRooms } = useHotel();
+  const [activeTab, setActiveTab] = useState<'sections' | 'menu' | 'rooms'>('sections');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Layout order lists initialized from context or defaults
@@ -47,13 +48,34 @@ export const RearrangeView: React.FC = () => {
     hotelInfo.disabledMenuItems || []
   );
 
-  const handleSave = () => {
+  const [roomsListOrder, setRoomsListOrder] = useState<any[]>(rooms);
+
+  // Keep roomsListOrder in sync if rooms are loaded/changed in parent context
+  React.useEffect(() => {
+    setRoomsListOrder(rooms);
+  }, [rooms]);
+
+  const handleSave = async () => {
     updateHotelInfo({
       sectionOrder,
       disabledSections,
       menuItemsOrder,
       disabledMenuItems
     });
+
+    // Also update rooms order in context and database
+    setRooms(roomsListOrder);
+    try {
+      const promises = roomsListOrder.map((room, idx) => 
+        (supabase.from('room_categories') as any)
+          .update({ display_order: idx })
+          .eq('id', room.id)
+      );
+      await Promise.all(promises);
+    } catch (err) {
+      console.warn('[Supabase] Save rooms order error:', err);
+    }
+
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
@@ -91,6 +113,18 @@ export const RearrangeView: React.FC = () => {
       newOrder[index] = newOrder[targetIndex];
       newOrder[targetIndex] = temp;
       setMenuItemsOrder(newOrder);
+    }
+  };
+
+  const moveRoom = (index: number, direction: 'up' | 'down') => {
+    const newOrder = [...roomsListOrder];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (targetIndex >= 0 && targetIndex < newOrder.length) {
+      const temp = newOrder[index];
+      newOrder[index] = newOrder[targetIndex];
+      newOrder[targetIndex] = temp;
+      setRoomsListOrder(newOrder);
     }
   };
 
@@ -132,6 +166,16 @@ export const RearrangeView: React.FC = () => {
           }`}
         >
           Header Navigation Links ({menuItemsOrder.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('rooms')}
+          className={`px-5 py-2.5 font-bold text-sm border-b-2 -mb-[2px] transition cursor-pointer ${
+            activeTab === 'rooms' 
+              ? 'border-blue-500 text-blue-700' 
+              : 'border-transparent text-zinc-400 hover:text-zinc-600'
+          }`}
+        >
+          Room Categories ({roomsListOrder.length})
         </button>
       </div>
 
@@ -201,7 +245,7 @@ export const RearrangeView: React.FC = () => {
               );
             })}
           </div>
-        ) : (
+        ) : activeTab === 'menu' ? (
           <div className="space-y-3">
             <span className="text-4xs font-bold text-zinc-450 uppercase tracking-wider block mb-2">Header Menu Items Configuration</span>
             {menuItemsOrder.map((menuId, idx) => {
@@ -264,6 +308,47 @@ export const RearrangeView: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <span className="text-4xs font-bold text-zinc-450 uppercase tracking-wider block mb-2">Room Category Listing Order</span>
+            {roomsListOrder.map((room, idx) => (
+              <div 
+                key={room.id} 
+                className="flex items-center justify-between p-3.5 rounded-lg border border-zinc-200 hover:border-[#8FA89B] bg-white transition"
+              >
+                <div className="flex items-center gap-3">
+                  <LayoutGrid className="w-4 h-4 text-zinc-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-800">
+                    {room.name}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Move Controls */}
+                  <div className="flex bg-zinc-50 border border-zinc-200 rounded-md p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveRoom(idx, 'up')}
+                      disabled={idx === 0}
+                      className="p-1 text-zinc-450 hover:text-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+                      title="Move Up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveRoom(idx, 'down')}
+                      disabled={idx === roomsListOrder.length - 1}
+                      className="p-1 text-zinc-450 hover:text-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+                      title="Move Down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

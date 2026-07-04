@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase as supabaseOriginal } from '../lib/supabaseClient';
+const supabase = supabaseOriginal as any;
 
 // --- TS Interfaces ---
 
@@ -82,6 +83,7 @@ export interface HotelInfo {
   customCancellationPolicies?: Array<{ id: string; xx: number; yy: number }>;
   paymentCollectionType?: 'full' | 'partial';
   paymentCollectionPercent?: number;
+  currentTemplate?: string;
 }
 
 // Co-host with role permissions
@@ -176,6 +178,9 @@ export interface Booking {
   addons: string[];
   couponCode?: string;
   createdAt: string;
+  adults?: number;
+  children?: number;
+  selectedSlot?: string;
 }
 
 export interface Addon {
@@ -232,6 +237,13 @@ export interface CustomPage {
   activitiesList?: { title: string; time: string; description: string; image?: string }[];
 }
 
+export interface EventSlot {
+  id: string;
+  fromTime: string; // e.g. "09:00"
+  toTime: string;   // e.g. "11:00"
+  capacity: number;
+}
+
 export interface GuestEvent {
   id: string;
   title: string;
@@ -244,6 +256,13 @@ export interface GuestEvent {
   time: string;
   price: number;
   capacity: number;
+  slots: EventSlot[];
+  priceAdult: number;
+  priceChild: number;
+  target: 'all' | 'room_guest' | 'outside_guest';
+  discount: number;
+  aboutText?: string;
+  longDescription?: string;
 }
 
 export interface EventLog {
@@ -265,18 +284,20 @@ export interface GuestMessage {
   read: boolean;
 }
 
-interface HotelContextType {
-  // Mode controls
-  appMode: 'dashboard' | 'editor';
-  setAppMode: (mode: 'dashboard' | 'editor') => void;
+export interface HotelContextType {
+  appMode: 'landing' | 'onboarding' | 'dashboard' | 'editor';
+  setAppMode: (mode: 'landing' | 'onboarding' | 'dashboard' | 'editor') => void;
   activePropertyId: string;
   setActivePropertyId: (id: string) => void;
+  setPropertiesList: React.Dispatch<React.SetStateAction<PropertyItem[]>>;
+  setHotelInfoState: React.Dispatch<React.SetStateAction<HotelInfo>>;
   canvasMode: 'editor' | 'guest';
   setCanvasMode: (mode: 'editor' | 'guest') => void;
   selectedTheme: string;
   setSelectedTheme: (theme: string) => void;
   propertiesList: PropertyItem[];
   addProperty: (name: string) => void;
+  deleteProperty: (id: string) => Promise<void>;
   addPropertyWithDetails: (details: {
     name: string;
     location: string;
@@ -285,6 +306,10 @@ interface HotelContextType {
     description: string;
     amenities: string[];
     googleBusinessName: string;
+    photos?: string[];
+    reviews?: Array<{ author: string; text: string; rating: number }>;
+    latitude?: number;
+    longitude?: number;
   }) => void;
   publishProperty: (id: string) => void;
 
@@ -365,10 +390,7 @@ const HotelContext = createContext<HotelContextType | undefined>(undefined);
 
 // --- Defaults / Mock Data ---
 
-const defaultProperties: PropertyItem[] = [
-  { id: 'prop-1', name: "Sri K Residency", status: 'Draft' },
-  { id: 'prop-2', name: "The Grandlake Resorts", status: 'Draft' }
-];
+export const defaultProperties: PropertyItem[] = [];
 
 const defaultHotelInfo: HotelInfo = {
   name: "The Grandlake Resorts",
@@ -435,7 +457,7 @@ const defaultHotelInfo: HotelInfo = {
   mealPlanApChildRate: 1250
 };
 
-const defaultRooms: RoomType[] = [
+export const defaultRooms: RoomType[] = [
   {
     id: "room-1",
     name: "Standard Room",
@@ -477,7 +499,7 @@ const defaultRooms: RoomType[] = [
   }
 ];
 
-const defaultAddons: Addon[] = [
+export const defaultAddons: Addon[] = [
   { 
     id: "addon-1", 
     name: "Birthday / Anniversary Decoration", 
@@ -504,23 +526,23 @@ const defaultAddons: Addon[] = [
   }
 ];
 
-const defaultCoupons: Coupon[] = [
+export const defaultCoupons: Coupon[] = [
   { id: "coupon-1", code: "WELCOME10", discountType: "percent", discountValue: 10, active: true }
 ];
 
-const defaultTestimonials: Testimonial[] = [
+export const defaultTestimonials: Testimonial[] = [
   { id: "test-1", author: "Rajesh Kumar", content: "Absolutely stunning property! Highly recommended.", rating: 5, stayDate: "2026-05-15" }
 ];
 
-const defaultFAQs: FAQ[] = [
+export const defaultFAQs: FAQ[] = [
   { id: "faq-1", question: "What are check-in and check-out timings?", answer: "Standard check-in is 2:00 PM and check-out is 11:00 AM." }
 ];
 
-const defaultPolicies: Policy[] = [
+export const defaultPolicies: Policy[] = [
   { id: "pol-1", title: "Cancellation Policy", description: "Free cancellation up to 48 hours prior to check-in." }
 ];
 
-const defaultCustomPages: CustomPage[] = [
+export const defaultCustomPages: CustomPage[] = [
   {
     id: "page-1",
     title: "Dining",
@@ -538,7 +560,7 @@ const defaultCustomPages: CustomPage[] = [
   }
 ];
 
-const defaultGuestEvents: GuestEvent[] = [
+export const defaultGuestEvents: GuestEvent[] = [
   {
     id: "evt-g1",
     title: "Fireside Melodies",
@@ -549,7 +571,12 @@ const defaultGuestEvents: GuestEvent[] = [
     toDate: "2026-07-16",
     time: "06:00 PM - 09:00 PM",
     price: 25.00,
-    capacity: 30
+    capacity: 30,
+    slots: [],
+    priceAdult: 25.00,
+    priceChild: 15.00,
+    target: 'all',
+    discount: 0
   },
   {
     id: "evt-g2",
@@ -561,7 +588,12 @@ const defaultGuestEvents: GuestEvent[] = [
     toDate: "2026-07-18",
     time: "07:00 AM - 09:00 AM",
     price: 15.00,
-    capacity: 20
+    capacity: 20,
+    slots: [],
+    priceAdult: 15.00,
+    priceChild: 10.00,
+    target: 'all',
+    discount: 0
   },
   {
     id: "evt-g3",
@@ -573,15 +605,20 @@ const defaultGuestEvents: GuestEvent[] = [
     toDate: "2026-07-20",
     time: "12:00 PM - 03:00 PM",
     price: 35.00,
-    capacity: 50
+    capacity: 50,
+    slots: [],
+    priceAdult: 35.00,
+    priceChild: 20.00,
+    target: 'all',
+    discount: 0
   }
 ];
 
-const defaultMessages: GuestMessage[] = [
+export const defaultMessages: GuestMessage[] = [
   { id: "msg-1", senderName: "Vivek Roy", senderEmail: "vivek@example.com", senderPhone: "+91 9988776655", subject: "Group Inquiry", message: "Planning a corporate retreat in August. Need 10 rooms. Please email package rates.", date: "2026-06-25", read: false }
 ];
 
-const defaultBookings: Booking[] = [
+export const defaultBookings: Booking[] = [
   {
     id: "book-1",
     roomId: "room-2",
@@ -599,7 +636,7 @@ const defaultBookings: Booking[] = [
   }
 ];
 
-const defaultEvents: EventLog[] = [
+export const defaultEvents: EventLog[] = [
   { id: "evt-1", title: "Welcome log", description: "System initialized successfully.", date: "2026-06-25 11:52", type: "info" }
 ];
 
@@ -607,104 +644,42 @@ const defaultEvents: EventLog[] = [
 
 export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Mode states
-  const [appMode, setAppMode] = useState<'dashboard' | 'editor'>('dashboard');
-  const [activePropertyId, setActivePropertyId] = useState<string>('prop-2');
+  const [appMode, setAppMode] = useState<'landing' | 'onboarding' | 'dashboard' | 'editor'>(() => {
+    const onboarded = localStorage.getItem('myota_onboarded');
+    return onboarded ? 'dashboard' : 'landing';
+  });
+  const [activePropertyId, setActivePropertyId] = useState<string>(() => {
+    return localStorage.getItem('activePropertyId') || '';
+  });
   const [canvasMode, setCanvasMode] = useState<'editor' | 'guest'>('editor');
   const [selectedTheme, setSelectedTheme] = useState<string>('THEME: ORGANIC NATURAL');
-  const [propertiesList, setPropertiesList] = useState<PropertyItem[]>(() => {
-    const saved = localStorage.getItem('propertiesList');
-    return saved ? JSON.parse(saved) : defaultProperties;
-  });
+  const [propertiesList, setPropertiesList] = useState<PropertyItem[]>([]);
 
-  const [hotelInfo, setHotelInfoState] = useState<HotelInfo>(() => {
-    const saved = localStorage.getItem('hotelInfo');
-    return saved ? JSON.parse(saved) : defaultHotelInfo;
-  });
+  const [hotelInfo, setHotelInfoState] = useState<HotelInfo>(defaultHotelInfo);
 
-  const [rooms, setRooms] = useState<RoomType[]>(() => {
-    const saved = localStorage.getItem('rooms');
-    if (saved) {
-      // Backward-compat migration: ensure all rooms have price_tiers
-      const parsed: RoomType[] = JSON.parse(saved);
-      return parsed.map(r => ({
-        ...r,
-        is_active: r.is_active ?? true,
-        price_tiers: r.price_tiers ?? { '1': r.basePrice, '2': r.basePrice },
-        beds: r.beds ?? {},
-        extra_beds: r.extra_beds ?? {},
-        inventory_overrides: r.inventory_overrides ?? {},
-        rate_overrides: r.rate_overrides ?? {},
-        min_occupancy: r.min_occupancy ?? 1,
-        base_occupancy: r.base_occupancy ?? r.capacityAdults,
-      }));
-    }
-    return defaultRooms.map(r => ({
-      ...r,
-      is_active: true,
-      price_tiers: { '1': r.basePrice, '2': Math.round(r.basePrice * 1.15) },
-      beds: {},
-      extra_beds: {},
-      inventory_overrides: {},
-      rate_overrides: {},
-      min_occupancy: 1,
-      base_occupancy: r.capacityAdults,
-    }));
-  });
+  const [rooms, setRooms] = useState<RoomType[]>([]);
 
-  const [pricing, setPricing] = useState<RoomPricing>(() => {
-    const saved = localStorage.getItem('pricing');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [pricing, setPricing] = useState<RoomPricing>({});
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('bookings');
-    return saved ? JSON.parse(saved) : defaultBookings;
-  });
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
-  const [addons, setAddons] = useState<Addon[]>(() => {
-    const saved = localStorage.getItem('addons');
-    return saved ? JSON.parse(saved) : defaultAddons;
-  });
+  const [addons, setAddons] = useState<Addon[]>([]);
 
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
-    const saved = localStorage.getItem('coupons');
-    return saved ? JSON.parse(saved) : defaultCoupons;
-  });
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
 
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(() => {
-    const saved = localStorage.getItem('testimonials');
-    return saved ? JSON.parse(saved) : defaultTestimonials;
-  });
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
-  const [faqs, setFaqs] = useState<FAQ[]>(() => {
-    const saved = localStorage.getItem('faqs');
-    return saved ? JSON.parse(saved) : defaultFAQs;
-  });
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
 
-  const [policies, setPolicies] = useState<Policy[]>(() => {
-    const saved = localStorage.getItem('policies');
-    return saved ? JSON.parse(saved) : defaultPolicies;
-  });
+  const [policies, setPolicies] = useState<Policy[]>([]);
 
-  const [customPages, setCustomPages] = useState<CustomPage[]>(() => {
-    const saved = localStorage.getItem('customPages');
-    return saved ? JSON.parse(saved) : defaultCustomPages;
-  });
+  const [customPages, setCustomPages] = useState<CustomPage[]>([]);
 
-  const [messages, setMessages] = useState<GuestMessage[]>(() => {
-    const saved = localStorage.getItem('messages');
-    return saved ? JSON.parse(saved) : defaultMessages;
-  });
+  const [messages, setMessages] = useState<GuestMessage[]>([]);
 
-  const [events, setEvents] = useState<EventLog[]>(() => {
-    const saved = localStorage.getItem('events');
-    return saved ? JSON.parse(saved) : defaultEvents;
-  });
+  const [events, setEvents] = useState<EventLog[]>([]);
 
-  const [guestEvents, setGuestEvents] = useState<GuestEvent[]>(() => {
-    const saved = localStorage.getItem('guestEvents');
-    return saved ? JSON.parse(saved) : defaultGuestEvents;
-  });
+  const [guestEvents, setGuestEvents] = useState<GuestEvent[]>([]);
 
   const [currentTemplate, setTemplateState] = useState<'luxury' | 'organic' | 'editorial' | 'artdeco' | 'pastel'>('organic');
   const [selectedView, setSelectedView] = useState<string>('property');
@@ -712,43 +687,13 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [editorFocus, setEditorFocus] = useState<'canvas' | 'form'>('canvas');
   const [previewPath, setPreviewPath] = useState<string>('/');
 
-  const [coHosts, setCoHosts] = useState<CoHost[]>(() => {
-    const saved = localStorage.getItem('coHosts');
-    return saved ? JSON.parse(saved) : [
-      { id: 'host-1', name: 'Yugandhar raj', phone: '+91 98765 43210', role: 'super_admin', canReceiveCalls: true, canAcceptBookings: true }
-    ];
-  });
+  const [coHosts, setCoHosts] = useState<CoHost[]>([]);
 
-  const [managedPhotos, setManagedPhotos] = useState<ManagedPhoto[]>(() => {
-    const saved = localStorage.getItem('managedPhotos');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [managedPhotos, setManagedPhotos] = useState<ManagedPhoto[]>([]);
 
-  const [managedVideos, setManagedVideos] = useState<ManagedVideo[]>(() => {
-    const saved = localStorage.getItem('managedVideos');
-    return saved ? JSON.parse(saved) : [
-      { id: 'vid-1', url: 'https://assets.mixkit.co/videos/preview/mixkit-swimming-pool-in-a-resort-40244-large.mp4', tags: ['pool', 'highlights'], isHero: true }
-    ];
-  });
+  const [managedVideos, setManagedVideos] = useState<ManagedVideo[]>([]);
 
-  // Sync to local storage
-  useEffect(() => { localStorage.setItem('propertiesList', JSON.stringify(propertiesList)); }, [propertiesList]);
-  useEffect(() => { localStorage.setItem('hotelInfo', JSON.stringify(hotelInfo)); }, [hotelInfo]);
-  useEffect(() => { localStorage.setItem('rooms', JSON.stringify(rooms)); }, [rooms]);
-  useEffect(() => { localStorage.setItem('pricing', JSON.stringify(pricing)); }, [pricing]);
-  useEffect(() => { localStorage.setItem('bookings', JSON.stringify(bookings)); }, [bookings]);
-  useEffect(() => { localStorage.setItem('addons', JSON.stringify(addons)); }, [addons]);
-  useEffect(() => { localStorage.setItem('coupons', JSON.stringify(coupons)); }, [coupons]);
-  useEffect(() => { localStorage.setItem('testimonials', JSON.stringify(testimonials)); }, [testimonials]);
-  useEffect(() => { localStorage.setItem('faqs', JSON.stringify(faqs)); }, [faqs]);
-  useEffect(() => { localStorage.setItem('policies', JSON.stringify(policies)); }, [policies]);
-  useEffect(() => { localStorage.setItem('customPages', JSON.stringify(customPages)); }, [customPages]);
-  useEffect(() => { localStorage.setItem('messages', JSON.stringify(messages)); }, [messages]);
-  useEffect(() => { localStorage.setItem('events', JSON.stringify(events)); }, [events]);
-  useEffect(() => { localStorage.setItem('guestEvents', JSON.stringify(guestEvents)); }, [guestEvents]);
-  useEffect(() => { localStorage.setItem('coHosts', JSON.stringify(coHosts)); }, [coHosts]);
-  useEffect(() => { localStorage.setItem('managedPhotos', JSON.stringify(managedPhotos)); }, [managedPhotos]);
-  useEffect(() => { localStorage.setItem('managedVideos', JSON.stringify(managedVideos)); }, [managedVideos]);
+  useEffect(() => { localStorage.setItem('activePropertyId', activePropertyId); }, [activePropertyId]);
 
   // Auto-sync hero images from managedPhotos when isHero changes
   useEffect(() => {
@@ -813,17 +758,20 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     id: b.id,
     roomId: b.room_id || '',
     roomName: b.room_name || '',
-    guestName: b.guest_name,
-    guestEmail: b.guest_email,
+    guestName: b.guest_name || '',
+    guestEmail: b.guest_email || '',
     guestPhone: b.guest_phone || '',
-    checkIn: b.check_in,
-    checkOut: b.check_out,
+    checkIn: b.check_in || '',
+    checkOut: b.check_out || '',
     totalPrice: Number(b.total_price),
-    paymentStatus: b.payment_status as Booking['paymentStatus'],
-    bookingStatus: b.booking_status as Booking['bookingStatus'],
+    paymentStatus: b.payment_status || 'pending',
+    bookingStatus: b.booking_status || 'confirmed',
     addons: b.addons || [],
-    couponCode: b.coupon_code || '',
-    createdAt: b.created_at,
+    couponCode: b.coupon_code || undefined,
+    createdAt: b.created_at || b.createdAt || '',
+    adults: b.adults ?? 1,
+    children: b.children ?? 0,
+    selectedSlot: b.selected_slot || undefined,
   });
 
   const mapDbAddon = (a: any): Addon => ({
@@ -892,6 +840,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     price: Number(e.price),
     capacity: e.capacity,
     date: e.from_date,
+    slots: e.slots || [],
+    priceAdult: Number(e.price_adult ?? e.price),
+    priceChild: Number(e.price_child ?? e.price),
+    target: (e.target || 'all') as GuestEvent['target'],
+    discount: Number(e.discount ?? 0),
   });
 
   const mapDbMessage = (m: any): GuestMessage => ({
@@ -991,11 +944,113 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     paymentCollectionPercent: s.payment_collection_percent,
   });
 
+  // Helper: build hotel_settings upsert payload from HotelInfo state
+  const buildHotelSettingsPayload = (info: HotelInfo, pid: string) => ({
+    property_id: pid,
+    name: info.name,
+    subdomain: info.subdomain,
+    custom_domain: info.customDomain,
+    star_rating: info.starRating,
+    check_in_time: info.checkInTime,
+    check_out_time: info.checkOutTime,
+    phone: info.phone,
+    email: info.email,
+    address: info.address,
+    latitude: info.latitude || null,
+    longitude: info.longitude || null,
+    tagline: info.tagline,
+    description: info.description,
+    short_description: info.shortDescription || null,
+    detailed_description: info.detailedDescription || null,
+    website_headline: info.websiteHeadline || null,
+    about_title: info.aboutTitle || null,
+    amenities_title: info.amenitiesTitle || null,
+    events_title: info.eventsTitle || null,
+    rooms_title: info.roomsTitle || null,
+    reviews_title: info.reviewsTitle || null,
+    gallery_title: info.galleryTitle || null,
+    addons_title: info.addonsTitle || null,
+    faqs_title: info.faqsTitle || null,
+    policies_title: info.policiesTitle || null,
+    primary_color: info.primaryColor,
+    secondary_color: info.secondaryColor,
+    bg_color: info.bgColor,
+    font_header: info.fontHeader,
+    font_body: info.fontBody,
+    logo_url: info.logoUrl,
+    favicon_url: info.faviconUrl || null,
+    google_analytics_id: info.googleAnalyticsId,
+    facebook_pixel_id: info.facebookPixelId,
+    instagram_handle: info.instagramHandle || null,
+    google_business_name: info.googleBusinessName || null,
+    hero_style: info.heroStyle,
+    hero_images: info.heroImages,
+    hero_video: info.heroVideo,
+    general_amenities: info.generalAmenities,
+    custom_amenities: info.customAmenities || [],
+    section_order: info.sectionOrder || [],
+    disabled_sections: info.disabledSections || [],
+    menu_items_order: info.menuItemsOrder || [],
+    disabled_menu_items: info.disabledMenuItems || [],
+    show_events: info.showEvents,
+    child_policy_enabled: info.childPolicyEnabled ?? false,
+    child_policy_min_age: info.childPolicyMinAge ?? 5,
+    child_policy_max_age: info.childPolicyMaxAge ?? 12,
+    extra_adult_rate: info.extraAdultRate ?? 0,
+    extra_child_rate: info.extraChildRate ?? 0,
+    meal_plan_cp_enabled: info.mealPlanCpEnabled ?? false,
+    meal_plan_cp_adult_rate: info.mealPlanCpAdultRate ?? 0,
+    meal_plan_cp_child_rate: info.mealPlanCpChildRate ?? 0,
+    meal_plan_map_enabled: info.mealPlanMapEnabled ?? false,
+    meal_plan_map_adult_rate: info.mealPlanMapAdultRate ?? 0,
+    meal_plan_map_child_rate: info.mealPlanMapChildRate ?? 0,
+    meal_plan_ap_enabled: info.mealPlanApEnabled ?? false,
+    meal_plan_ap_adult_rate: info.mealPlanApAdultRate ?? 0,
+    meal_plan_ap_child_rate: info.mealPlanApChildRate ?? 0,
+    default_meal_plan: info.defaultMealPlan || 'EP',
+    cancellation_policy_type: info.cancellationPolicyType || '2d',
+    cancellation_policy_custom_text: info.cancellationPolicyCustomText || null,
+    non_refundable_discount_amount: info.nonRefundableDiscountAmount ?? 0,
+    custom_cancellation_policies: (info.customCancellationPolicies as any) || [],
+    payment_collection_type: info.paymentCollectionType || 'partial',
+    payment_collection_percent: info.paymentCollectionPercent ?? 50,
+    current_template: info.currentTemplate || 'organic',
+  });
+
+  // Helper: build room_categories upsert payload from RoomType
+  const buildRoomPayload = (room: RoomType, pid: string) => ({
+    id: room.id,
+    property_id: pid,
+    name: room.name,
+    description: room.description,
+    size_sqft: room.sizeSqft || 0,
+    bed_type: room.bedType || '',
+    capacity_adults: room.capacityAdults,
+    capacity_children: room.capacityChildren,
+    min_occupancy: room.min_occupancy || 1,
+    base_occupancy: room.base_occupancy || room.capacityAdults,
+    base_price: room.basePrice,
+    price_tiers: room.price_tiers || {},
+    total_inventory: room.totalInventory,
+    beds: room.beds || {},
+    extra_beds: room.extra_beds || {},
+    amenities: room.amenities,
+    photos: room.photos,
+    inventory_overrides: room.inventory_overrides || {},
+    rate_overrides: room.rate_overrides || {},
+    cancellation_policy_overrides: room.cancellation_policy_overrides || {},
+    is_active: room.is_active ?? true,
+  });
+
   // Load all data from Supabase on mount (parallel fetch)
+  // Also seeds properties + hotel_settings + rooms if first time
   useEffect(() => {
     const loadAll = async () => {
       const pid = activePropertyId;
+      if (!pid) return; // Skip if no property is active
       try {
+
+        // Step 2: Load all remaining tables in parallel
         const [
           { data: settingsData },
           { data: roomsData },
@@ -1028,51 +1083,213 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           supabase.from('event_logs').select('*').eq('property_id', pid).order('created_at', { ascending: false }).limit(50),
         ]);
 
-        if (settingsData) setHotelInfoState(prev => ({ ...prev, ...mapDbHotelSettings(settingsData) }));
-        if (roomsData && roomsData.length > 0) setRooms(roomsData.map(mapDbRoom));
-        if (bookingsData && bookingsData.length > 0) setBookings(bookingsData.map(mapDbBooking));
-        if (addonsData && addonsData.length > 0) setAddons(addonsData.map(mapDbAddon));
-        if (couponsData && couponsData.length > 0) setCoupons(couponsData.map(mapDbCoupon));
-        if (testimonialsData && testimonialsData.length > 0) setTestimonials(testimonialsData.map(mapDbTestimonial));
-        if (faqsData && faqsData.length > 0) setFaqs(faqsData.map(mapDbFaq));
-        if (policiesData && policiesData.length > 0) setPolicies(policiesData.map(mapDbPolicy));
-        if (pagesData && pagesData.length > 0) setCustomPages(pagesData.map(mapDbCustomPage));
-        if (guestEventsData && guestEventsData.length > 0) setGuestEvents(guestEventsData.map(mapDbGuestEvent));
-        if (coHostsData && coHostsData.length > 0) setCoHosts(coHostsData.map(mapDbCoHost));
-        if (mediaData && mediaData.length > 0) {
-          setManagedPhotos(mediaData.filter(m => m.media_type === 'photo').map(m => mapDbMedia(m) as ManagedPhoto));
-          setManagedVideos(mediaData.filter(m => m.media_type === 'video').map(m => mapDbMedia(m) as ManagedVideo));
+        // Step 3: Apply loaded data to state
+        if (settingsData) {
+          setHotelInfoState(prev => ({ ...prev, ...mapDbHotelSettings(settingsData) }));
+        } else {
+          // If no settings exist in DB yet, create a clean default settings template
+          const prop = propertiesList.find(p => p.id === pid);
+          const initialInfo: HotelInfo = {
+            ...defaultHotelInfo,
+            name: prop?.name || hotelInfo.name || defaultHotelInfo.name,
+          };
+          setHotelInfoState(initialInfo);
+          await supabase.from('hotel_settings').upsert(buildHotelSettingsPayload(initialInfo, pid));
         }
-        if (messagesData && messagesData.length > 0) setMessages(messagesData.map(mapDbMessage));
+
+        if (roomsData && roomsData.length > 0) {
+          setRooms(roomsData.map(mapDbRoom));
+        } else {
+          setRooms([]);
+        }
+
+        if (bookingsData && bookingsData.length > 0) {
+          setBookings(bookingsData.map(mapDbBooking));
+        } else {
+          setBookings([]);
+        }
+
+        if (addonsData && addonsData.length > 0) {
+          setAddons(addonsData.map(mapDbAddon));
+        } else {
+          setAddons([]);
+        }
+
+        if (couponsData && couponsData.length > 0) {
+          setCoupons(couponsData.map(mapDbCoupon));
+        } else {
+          setCoupons([]);
+        }
+
+        if (testimonialsData && testimonialsData.length > 0) {
+          setTestimonials(testimonialsData.map(mapDbTestimonial));
+        } else {
+          setTestimonials([]);
+        }
+
+        if (faqsData && faqsData.length > 0) {
+          setFaqs(faqsData.map(mapDbFaq));
+        } else {
+          setFaqs([]);
+        }
+
+        if (policiesData && policiesData.length > 0) {
+          setPolicies(policiesData.map(mapDbPolicy));
+        } else {
+          setPolicies([]);
+        }
+
+        if (pagesData && pagesData.length > 0) {
+          setCustomPages(pagesData.map(mapDbCustomPage));
+        } else {
+          setCustomPages([]);
+        }
+
+        if (guestEventsData && guestEventsData.length > 0) {
+          setGuestEvents(guestEventsData.map(mapDbGuestEvent));
+        } else {
+          setGuestEvents([]);
+        }
+
+        if (coHostsData && coHostsData.length > 0) {
+          setCoHosts(coHostsData.map(mapDbCoHost));
+        } else {
+          setCoHosts([]);
+        }
+
+        if (mediaData && mediaData.length > 0) {
+          setManagedPhotos(mediaData.filter((m: any) => m.media_type === 'photo').map((m: any) => mapDbMedia(m) as ManagedPhoto));
+          setManagedVideos(mediaData.filter((m: any) => m.media_type === 'video').map((m: any) => mapDbMedia(m) as ManagedVideo));
+        } else {
+          setManagedPhotos([]);
+          setManagedVideos([]);
+        }
+
+        if (messagesData && messagesData.length > 0) {
+          setMessages(messagesData.map(mapDbMessage));
+        } else {
+          setMessages([]);
+        }
+
         if (eventLogsData && eventLogsData.length > 0) {
-          setEvents(eventLogsData.map(e => ({
+          setEvents(eventLogsData.map((e: any) => ({
             id: e.id,
             title: e.title,
             description: e.description || '',
             date: e.created_at?.slice(0, 16).replace('T', ' ') || '',
             type: e.log_type as EventLog['type'],
           })));
+        } else {
+          setEvents([]);
         }
       } catch (err) {
-        console.warn('[Supabase] Initial load failed, using localStorage fallback:', err);
+        console.warn('[Supabase] Initial load failed, using clean fallback:', err);
       }
     };
     loadAll();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePropertyId]);
 
-  // Actions
-  const addProperty = (name: string) => {
-    const newProp: PropertyItem = {
-      id: `prop-${Date.now()}`,
-      name,
-      status: 'Draft'
-    };
-    setPropertiesList(prev => [...prev, newProp]);
-    addEventLog('Property Created', `Created property config: "${name}"`, 'info');
+  // Sync properties list from Supabase
+  const fetchPropertiesForUser = async (ownerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('id, name, status')
+        .eq('owner_id', ownerId);
+
+      if (error) throw error;
+      if (data) {
+        const mapped: PropertyItem[] = data.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          status: p.status === 'published' ? 'Published' : 'Draft'
+        }));
+        setPropertiesList(mapped);
+        
+        // Set active property if not set
+        const savedActive = localStorage.getItem('activePropertyId');
+        if (mapped.length > 0) {
+          if (!savedActive || !mapped.some(p => p.id === savedActive)) {
+            setActivePropertyId(mapped[0].id);
+          }
+        } else {
+          setActivePropertyId('');
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase] fetchPropertiesForUser error:', err);
+    }
   };
 
-  const addPropertyWithDetails = (details: {
+  // Sync active Supabase Auth session on mount and auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+      if (session && session.user) {
+        localStorage.setItem('myota_onboarded', 'true');
+        localStorage.setItem('myota_owner_id', session.user.id);
+        localStorage.setItem('myota_user_email', session.user.email || '');
+
+        const emailPrefix = (session.user.email || '').split('@')[0] || 'User';
+        const userName = session.user.email?.toLowerCase() === 'dhanvanthkrishnan@gmail.com' ? 'Dhanvanth Krishnan' : emailPrefix;
+        localStorage.setItem('myota_user_name', userName);
+        
+        // Trigger fetch!
+        fetchPropertiesForUser(session.user.id);
+      } else {
+        localStorage.removeItem('myota_onboarded');
+        localStorage.removeItem('myota_owner_id');
+        localStorage.removeItem('myota_user_name');
+        localStorage.removeItem('myota_user_email');
+        localStorage.removeItem('myota_user_phone');
+        setAppMode('landing');
+        setPropertiesList([]);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Debounced sync: whenever hotelInfo changes, upsert hotel_settings after 1.5s idle
+  const hotelSyncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (hotelSyncTimer.current) clearTimeout(hotelSyncTimer.current);
+    hotelSyncTimer.current = setTimeout(async () => {
+      try {
+        await Promise.all([
+          supabase.from('hotel_settings').upsert(buildHotelSettingsPayload(hotelInfo, activePropertyId)),
+          supabase.from('properties').update({ name: hotelInfo.name }).eq('id', activePropertyId)
+        ]);
+        // Instantly update the local list state so sidebar updates name in real-time
+        setPropertiesList(prev => prev.map(p => p.id === activePropertyId ? { ...p, name: hotelInfo.name } : p));
+      } catch (err) {
+        console.warn('[Supabase] hotel sync error:', err);
+      }
+    }, 1500);
+    return () => { if (hotelSyncTimer.current) clearTimeout(hotelSyncTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelInfo]);
+
+  // Actions
+  const addProperty = async (name: string) => {
+    const id = `prop-${Date.now()}`;
+    const newProp: PropertyItem = { id, name, status: 'Draft' };
+    setPropertiesList(prev => [...prev, newProp]);
+    addEventLog('Property Created', `Created property config: "${name}"`, 'info');
+    try {
+      const ownerId = localStorage.getItem('myota_owner_id');
+      await supabase.from('properties').insert({ 
+        id, 
+        name, 
+        status: 'draft', 
+        owner_id: ownerId || null 
+      });
+    } catch (err) { console.warn('[Supabase] addProperty:', err); }
+  };
+
+  const addPropertyWithDetails = async (details: {
     name: string;
     location: string;
     phone: string;
@@ -1080,11 +1297,143 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     description: string;
     amenities: string[];
     googleBusinessName: string;
+    photos?: string[];
+    reviews?: Array<{ author: string; text: string; rating: number }>;
+    latitude?: number;
+    longitude?: number;
   }) => {
     const id = `prop-${Date.now()}`;
     const newProp: PropertyItem = { id, name: details.name, status: 'Draft' };
+    
+    // Define Default Seeds
+    const defaultFAQs = [
+      { question: 'What are the standard check-in and check-out times?', answer: 'Our standard check-in time is 2:00 PM and check-out is 11:00 AM. Early check-in or late check-out is subject to availability and may incur additional charges.' },
+      { question: 'Is breakfast included in the room rate?', answer: 'Yes, we offer complimentary buffet breakfast for all registered guests daily from 7:30 AM to 10:00 AM at our dining area.' },
+      { question: 'Do you have on-site parking available?', answer: 'Yes, we provide free private parking and valet services for our guests on-site.' },
+      { question: 'Is high-speed Wi-Fi available at the property?', answer: 'Yes, complimentary high-speed Wi-Fi is accessible in all rooms, suites, and public areas.' }
+    ];
+
+    const defaultPolicies = [
+      { title: 'Guest Registration & ID Proof', description: 'All guests (including children) must present a valid government-approved photo ID (Aadhaar, Passport, Driving License) upon check-in. Foreign nationals must present a valid passport and visa.' },
+      { title: 'Cancellation & Refund Policy', description: 'Cancellations made 7 days prior to check-in will receive a full refund. Cancellations between 3 to 7 days will incur a 50% charge. Within 72 hours of check-in, bookings are non-refundable.' },
+      { title: 'Smoking & Alcohol Policy', description: 'Smoking is strictly prohibited inside the guest rooms and indoor public spaces. Designated outdoor smoking zones are available. Moderate consumption of alcohol is permitted inside rooms.' },
+      { title: 'Pet Policy', description: 'Pets are not allowed in standard rooms to ensure a hypoallergenic environment. Please check with our front desk for pet-friendly cottage options.' }
+    ];
+
+    const defaultRoomsSeed = [
+      {
+        id: `room-${Date.now()}-1`,
+        property_id: id,
+        name: 'Standard Room',
+        description: 'A cozy and elegant room equipped with all modern amenities for a comfortable stay.',
+        base_price: 3500,
+        size_sqft: 250,
+        bed_type: 'Queen Bed',
+        capacity_adults: 2,
+        capacity_children: 1,
+        total_inventory: 5,
+        amenities: ['Free Wi-Fi', 'Air Conditioning', 'Flat-screen TV', 'Electric Kettle', 'Attached Bathroom', 'Toiletries'],
+        photos: ['https://images.unsplash.com/photo-1611891487122-2075b9627dde?w=800&auto=format&fit=crop&q=60'],
+        display_order: 1,
+        is_active: true
+      },
+      {
+        id: `room-${Date.now()}-2`,
+        property_id: id,
+        name: 'Deluxe Room',
+        description: 'Spacious deluxe suite offering panoramic views, premium furnishings, and a luxurious seating area.',
+        base_price: 5500,
+        size_sqft: 400,
+        bed_type: 'King Bed',
+        capacity_adults: 3,
+        capacity_children: 2,
+        total_inventory: 3,
+        amenities: ['Free Wi-Fi', 'Air Conditioning', 'Mini Bar', 'Private Balcony', 'Safety Deposit Box', 'King Bed', 'Rain Shower'],
+        photos: ['https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=60'],
+        display_order: 2,
+        is_active: true
+      }
+    ];
+
+    // Await insert FIRST to resolve Yellow Lake Resort refresh race condition
+    try {
+      const ownerId = localStorage.getItem('myota_owner_id');
+      await supabase.from('properties').insert({ 
+        id, 
+        name: details.name, 
+        status: 'draft', 
+        owner_id: ownerId || null 
+      });
+
+      // Upsert default settings with Google details and hero images
+      const initialSettings = {
+        ...defaultHotelInfo,
+        name: details.name,
+        phone: details.phone,
+        email: details.email,
+        address: details.location,
+        description: details.description,
+        latitude: details.latitude ?? defaultHotelInfo.latitude,
+        longitude: details.longitude ?? defaultHotelInfo.longitude,
+        generalAmenities: details.amenities.length > 0 ? details.amenities : defaultHotelInfo.generalAmenities,
+        googleBusinessName: details.googleBusinessName,
+        heroImages: details.photos && details.photos.length > 0 ? details.photos : [],
+      };
+      await supabase.from('hotel_settings').upsert(buildHotelSettingsPayload(initialSettings, id));
+
+      // Seed photos into media_library
+      if (details.photos && details.photos.length > 0) {
+        const mediaPayload = details.photos.map((url, idx) => ({
+          id: `photo-${Date.now()}-${idx}`,
+          property_id: id,
+          url,
+          media_type: 'photo',
+          tags: ['google-business', 'imported'],
+          is_hero: idx === 0,
+        }));
+        await supabase.from('media_library').insert(mediaPayload);
+      }
+
+      // Seed Google Reviews as Testimonials
+      if (details.reviews && details.reviews.length > 0) {
+        const testimonialsPayload = details.reviews.filter(r => r.text.trim()).map((r, idx) => ({
+          id: `test-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+          property_id: id,
+          author: r.author,
+          content: r.text,
+          rating: r.rating,
+          stay_date: new Date(Date.now() - idx * 86400000 * 30).toISOString().split('T')[0]
+        }));
+        await supabase.from('testimonials').insert(testimonialsPayload);
+      }
+
+      // Seed standard FAQs
+      const faqsPayload = defaultFAQs.map((faq, idx) => ({
+        id: `faq-${Date.now()}-${idx}`,
+        property_id: id,
+        question: faq.question,
+        answer: faq.answer,
+        display_order: idx
+      }));
+      await supabase.from('faqs').insert(faqsPayload);
+
+      // Seed standard Policies
+      const policiesPayload = defaultPolicies.map((pol, idx) => ({
+        id: `policy-${Date.now()}-${idx}`,
+        property_id: id,
+        title: pol.title,
+        description: pol.description,
+        display_order: idx
+      }));
+      await supabase.from('policies').insert(policiesPayload);
+
+      // Seed default Rooms
+      await supabase.from('room_categories').insert(defaultRoomsSeed);
+    } catch (err) { 
+      console.warn('[Supabase] addPropertyWithDetails:', err); 
+    }
+
     setPropertiesList(prev => [...prev, newProp]);
-    // Pre-fill hotelInfo with onboarding data
     setHotelInfoState(prev => ({
       ...prev,
       name: details.name,
@@ -1092,56 +1441,200 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       email: details.email,
       address: details.location,
       description: details.description,
+      latitude: details.latitude ?? prev.latitude,
+      longitude: details.longitude ?? prev.longitude,
       generalAmenities: details.amenities.length > 0 ? details.amenities : prev.generalAmenities,
       googleBusinessName: details.googleBusinessName,
+      heroImages: details.photos && details.photos.length > 0 ? details.photos : prev.heroImages,
     }));
+    
+    // Initialize state locally for seamless preview load!
+    if (details.photos && details.photos.length > 0) {
+      setManagedPhotos(details.photos.map((url, idx) => ({
+        id: `photo-${Date.now()}-${idx}`,
+        url,
+        tags: ['google-business', 'imported'],
+        isHero: idx === 0,
+      })));
+    } else {
+      setManagedPhotos([]);
+    }
+
+    // Populate FAQs local state
+    setFaqs(defaultFAQs.map((faq, idx) => ({
+      id: `faq-${Date.now()}-${idx}`,
+      question: faq.question,
+      answer: faq.answer,
+      displayOrder: idx
+    })));
+
+    // Populate Policies local state
+    setPolicies(defaultPolicies.map((pol, idx) => ({
+      id: `policy-${Date.now()}-${idx}`,
+      title: pol.title,
+      description: pol.description,
+      displayOrder: idx
+    })));
+
+    // Populate Rooms local state
+    setRooms(defaultRoomsSeed.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      basePrice: r.base_price,
+      sizeSqft: r.size_sqft,
+      bedType: r.bed_type,
+      capacityAdults: r.capacity_adults,
+      capacityChildren: r.capacity_children,
+      totalInventory: r.total_inventory,
+      amenities: r.amenities,
+      photos: r.photos,
+      is_active: r.is_active,
+      beds: {},
+      extra_beds: {},
+      price_tiers: { '1': r.base_price, '2': Math.round(r.base_price * 1.15) },
+      inventory_overrides: {},
+      rate_overrides: {},
+      cancellation_policy_overrides: {}
+    })));
+
+    // Populate Testimonials local state
+    if (details.reviews && details.reviews.length > 0) {
+      setTestimonials(details.reviews.filter(r => r.text.trim()).map((r, idx) => ({
+        id: `test-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        author: r.author,
+        content: r.text,
+        rating: r.rating,
+        stayDate: new Date(Date.now() - idx * 86400000 * 30).toISOString().split('T')[0]
+      })));
+    } else {
+      setTestimonials([]);
+    }
+
     setActivePropertyId(id);
     addEventLog('Property Created', `Onboarded "${details.name}" via setup wizard.`, 'info');
   };
 
-  const publishProperty = (id: string) => {
+  const deleteProperty = async (id: string) => {
+    // 1. Remove from local properties state
+    setPropertiesList(prev => prev.filter(p => p.id !== id));
+    addEventLog('Property Deleted', `Permanently deleted property configuration.`, 'info');
+    
+    // 2. If it was active, select the first remaining property or clear active property
+    if (activePropertyId === id) {
+      const remaining = propertiesList.filter(p => p.id !== id);
+      if (remaining.length > 0) {
+        setActivePropertyId(remaining[0].id);
+      } else {
+        setActivePropertyId('');
+        setRooms([]);
+        setAddons([]);
+        setCoupons([]);
+        setTestimonials([]);
+        setFaqs([]);
+        setPolicies([]);
+        setCustomPages([]);
+        setManagedPhotos([]);
+        setManagedVideos([]);
+        setHotelInfoState(defaultHotelInfo);
+      }
+    }
+    
+    // 3. Delete from Supabase
+    try {
+      await supabase.from('properties').delete().eq('id', id);
+    } catch (err) {
+      console.warn('[Supabase] deleteProperty failed:', err);
+    }
+  };
+
+  const publishProperty = async (id: string) => {
     setPropertiesList(prev => prev.map(p => p.id === id ? { ...p, status: 'Published' } : p));
     addEventLog('Property Published', 'Active layout built and mapped successfully.', 'info');
+    try {
+      await supabase.from('properties').update({ status: 'published' }).eq('id', id);
+    } catch (err) { console.warn('[Supabase] publishProperty:', err); }
   };
 
   const updateHotelInfo = (info: Partial<HotelInfo>) => {
+    // Update local state immediately (debounced Supabase upsert fires via useEffect)
     setHotelInfoState(prev => ({ ...prev, ...info }));
-    // Automatically update name in propertiesList if matching active
     setPropertiesList(prev => prev.map(p => p.id === activePropertyId && info.name ? { ...p, name: info.name } : p));
+    // Also sync property name to properties table if name changed
+    if (info.name) {
+      supabase.from('properties').update({ name: info.name })
+        .eq('id', activePropertyId)
+        .then(({ error }: { error: any }) => { if (error) console.warn('[Supabase] updateHotelInfo name sync:', error); });
+    }
   };
 
-  const addRoom = (room: Omit<RoomType, 'id'>) => {
-    const newRoom: RoomType = {
-      ...room,
-      id: `room-${Date.now()}`
-    };
+  const addRoom = async (room: Omit<RoomType, 'id'>) => {
+    const id = `room-${Date.now()}`;
+    const newRoom: RoomType = { ...room, id };
     setRooms(prev => [...prev, newRoom]);
     addEventLog('Room Category Added', `New room category "${room.name}" created.`, 'info');
+    try {
+      await supabase.from('room_categories').insert(buildRoomPayload(newRoom, activePropertyId));
+    } catch (err) { console.warn('[Supabase] addRoom:', err); }
   };
 
-  const updateRoom = (id: string, roomData: Partial<RoomType>) => {
+  const updateRoom = async (id: string, roomData: Partial<RoomType>) => {
     setRooms(prev => prev.map(r => r.id === id ? { ...r, ...roomData } : r));
     addEventLog('Room Category Updated', `Settings for "${roomData.name || 'room'}" adjusted.`, 'info');
+    try {
+      // Build partial update payload — only include defined fields
+      const payload: Record<string, unknown> = {};
+      if (roomData.name !== undefined) payload.name = roomData.name;
+      if (roomData.description !== undefined) payload.description = roomData.description;
+      if (roomData.basePrice !== undefined) payload.base_price = roomData.basePrice;
+      if (roomData.totalInventory !== undefined) payload.total_inventory = roomData.totalInventory;
+      if (roomData.sizeSqft !== undefined) payload.size_sqft = roomData.sizeSqft;
+      if (roomData.bedType !== undefined) payload.bed_type = roomData.bedType;
+      if (roomData.capacityAdults !== undefined) payload.capacity_adults = roomData.capacityAdults;
+      if (roomData.capacityChildren !== undefined) payload.capacity_children = roomData.capacityChildren;
+      if (roomData.min_occupancy !== undefined) payload.min_occupancy = roomData.min_occupancy;
+      if (roomData.base_occupancy !== undefined) payload.base_occupancy = roomData.base_occupancy;
+      if (roomData.price_tiers !== undefined) payload.price_tiers = roomData.price_tiers;
+      if (roomData.beds !== undefined) payload.beds = roomData.beds;
+      if (roomData.extra_beds !== undefined) payload.extra_beds = roomData.extra_beds;
+      if (roomData.amenities !== undefined) payload.amenities = roomData.amenities;
+      if (roomData.photos !== undefined) payload.photos = roomData.photos;
+      if (roomData.inventory_overrides !== undefined) payload.inventory_overrides = roomData.inventory_overrides;
+      if (roomData.rate_overrides !== undefined) payload.rate_overrides = roomData.rate_overrides;
+      if (roomData.cancellation_policy_overrides !== undefined) payload.cancellation_policy_overrides = roomData.cancellation_policy_overrides;
+      if (roomData.is_active !== undefined) payload.is_active = roomData.is_active;
+      await supabase.from('room_categories').update(payload).eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] updateRoom:', err); }
   };
 
-  const deleteRoom = (id: string) => {
+  const deleteRoom = async (id: string) => {
     setRooms(prev => prev.filter(r => r.id !== id));
     addEventLog('Room Category Deleted', `Room type removed from active listings.`, 'info');
+    try {
+      await supabase.from('room_categories').delete().eq('id', id).eq('property_id', activePropertyId);
+    } catch (err) { console.warn('[Supabase] deleteRoom:', err); }
   };
 
-  const updateDateOverride = (roomId: string, date: string, override: Partial<PricingOverride>) => {
+  const updateDateOverride = async (roomId: string, date: string, override: Partial<PricingOverride>) => {
+    // Update local pricing state immediately
     setPricing(prev => {
       const roomPricing = prev[roomId] || {};
       const dayPricing = roomPricing[date] || { date, price: 0, isBlocked: false };
-      
       return {
-         ...prev,
-        [roomId]: {
-          ...roomPricing,
-          [date]: { ...dayPricing, ...override }
-        }
+        ...prev,
+        [roomId]: { ...roomPricing, [date]: { ...dayPricing, ...override } }
       };
     });
+    // Upsert to pricing_overrides table
+    try {
+      await supabase.from('pricing_overrides').upsert({
+        room_id: roomId,
+        property_id: activePropertyId,
+        date,
+        price: override.price ?? 0,
+        is_blocked: override.isBlocked ?? false,
+      });
+    } catch (err) { console.warn('[Supabase] updateDateOverride:', err); }
   };
 
   const addBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt'>) => {
@@ -1169,6 +1662,9 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         booking_status: newBooking.bookingStatus,
         addons: newBooking.addons,
         coupon_code: newBooking.couponCode || null,
+        adults: newBooking.adults ?? 1,
+        children: newBooking.children ?? 0,
+        selected_slot: newBooking.selectedSlot || null
       });
     } catch (err) {
       console.warn('[Supabase] addBooking error:', err);
@@ -1366,6 +1862,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         title: evt.title, category: evt.category, description: evt.description,
         image: evt.image, from_date: evt.fromDate, to_date: evt.toDate,
         time: evt.time, price: evt.price, capacity: evt.capacity,
+        slots: evt.slots || [],
+        price_adult: evt.priceAdult || 0,
+        price_child: evt.priceChild || 0,
+        target: evt.target || 'all',
+        discount: evt.discount || 0
       });
     } catch (err) { console.warn('[Supabase] addGuestEvent:', err); }
   };
@@ -1377,6 +1878,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         title: evtData.title, category: evtData.category, description: evtData.description,
         image: evtData.image, from_date: evtData.fromDate, to_date: evtData.toDate,
         time: evtData.time, price: evtData.price, capacity: evtData.capacity,
+        slots: evtData.slots,
+        price_adult: evtData.priceAdult,
+        price_child: evtData.priceChild,
+        target: evtData.target,
+        discount: evtData.discount
       }).eq('id', id).eq('property_id', activePropertyId);
     } catch (err) { console.warn('[Supabase] updateGuestEvent:', err); }
   };
@@ -1457,6 +1963,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setPreviewPath,
       
       updateHotelInfo,
+      setPropertiesList,
+      setHotelInfoState,
       setRooms,
       addRoom,
       updateRoom,
@@ -1570,6 +2078,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           await supabase.from('media_library').delete().eq('id', id).eq('property_id', activePropertyId);
         } catch (err) { console.warn('[Supabase] deleteManagedVideo:', err); }
       },
+      deleteProperty,
     }}>
       {children}
     </HotelContext.Provider>

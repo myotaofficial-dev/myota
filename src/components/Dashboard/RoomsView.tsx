@@ -528,8 +528,8 @@ export const RoomsView: React.FC = () => {
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 font-medium">₹</div>
                 <input
                   type="number"
-                  value={extraAdultRate}
-                  onChange={(e) => setExtraAdultRate(Number(e.target.value))}
+                  value={extraAdultRate === 0 ? '' : extraAdultRate}
+                  onChange={(e) => setExtraAdultRate(e.target.value === '' ? 0 : Number(e.target.value))}
                   placeholder="0"
                   className="w-full bg-[#FAFAF9] border border-[#E7E5E4] focus:border-teal-650 focus:bg-white rounded-xl pl-8 pr-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans"
                 />
@@ -542,8 +542,8 @@ export const RoomsView: React.FC = () => {
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 font-medium">₹</div>
                 <input
                   type="number"
-                  value={extraChildRate}
-                  onChange={(e) => setExtraChildRate(Number(e.target.value))}
+                  value={extraChildRate === 0 ? '' : extraChildRate}
+                  onChange={(e) => setExtraChildRate(e.target.value === '' ? 0 : Number(e.target.value))}
                   placeholder="0"
                   className="w-full bg-[#FAFAF9] border border-[#E7E5E4] focus:border-teal-650 focus:bg-white rounded-xl pl-8 pr-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans"
                 />
@@ -604,8 +604,7 @@ export const RoomsView: React.FC = () => {
                 />
               </button>
             </div>
-            
-            <div className="grid grid-cols-2 gap-2">
+                 <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block">Adult / Night</label>
                 <div className="relative rounded-lg">
@@ -613,8 +612,8 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanCpEnabled}
-                    value={mealPlanCpAdultRate}
-                    onChange={(e) => setMealPlanCpAdultRate(Number(e.target.value))}
+                    value={mealPlanCpAdultRate === 0 ? '' : mealPlanCpAdultRate}
+                    onChange={(e) => setMealPlanCpAdultRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
@@ -626,8 +625,8 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanCpEnabled}
-                    value={mealPlanCpChildRate}
-                    onChange={(e) => setMealPlanCpChildRate(Number(e.target.value))}
+                    value={mealPlanCpChildRate === 0 ? '' : mealPlanCpChildRate}
+                    onChange={(e) => setMealPlanCpChildRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
@@ -665,8 +664,8 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanMapEnabled}
-                    value={mealPlanMapAdultRate}
-                    onChange={(e) => setMealPlanMapAdultRate(Number(e.target.value))}
+                    value={mealPlanMapAdultRate === 0 ? '' : mealPlanMapAdultRate}
+                    onChange={(e) => setMealPlanMapAdultRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
@@ -678,8 +677,8 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanMapEnabled}
-                    value={mealPlanMapChildRate}
-                    onChange={(e) => setMealPlanMapChildRate(Number(e.target.value))}
+                    value={mealPlanMapChildRate === 0 ? '' : mealPlanMapChildRate}
+                    onChange={(e) => setMealPlanMapChildRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
@@ -717,8 +716,8 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanApEnabled}
-                    value={mealPlanApAdultRate}
-                    onChange={(e) => setMealPlanApAdultRate(Number(e.target.value))}
+                    value={mealPlanApAdultRate === 0 ? '' : mealPlanApAdultRate}
+                    onChange={(e) => setMealPlanApAdultRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
@@ -730,15 +729,15 @@ export const RoomsView: React.FC = () => {
                   <input
                     type="number"
                     disabled={!mealPlanApEnabled}
-                    value={mealPlanApChildRate}
-                    onChange={(e) => setMealPlanApChildRate(Number(e.target.value))}
+                    value={mealPlanApChildRate === 0 ? '' : mealPlanApChildRate}
+                    onChange={(e) => setMealPlanApChildRate(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-white border border-zinc-200 focus:border-teal-650 disabled:opacity-50 disabled:bg-zinc-100 rounded-lg pl-6 pr-2 py-1.5 text-xs text-zinc-800 outline-hidden font-medium font-sans"
                   />
                 </div>
-              </div>
             </div>
           </div>
         </div>
+      </div>
 
         {/* Default Meal Plan Selector */}
         <div className="bg-[#FAFAF9] border border-zinc-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -827,7 +826,7 @@ export const RoomsView: React.FC = () => {
               min="1"
               max="100"
               value={paymentCollectionPercent === 0 ? '' : paymentCollectionPercent}
-              onChange={(e) => setPaymentCollectionPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
+              onChange={(e) => setPaymentCollectionPercent(e.target.value === '' ? 0 : Math.min(100, Math.max(0, Number(e.target.value))))}
               className="w-16 text-center font-bold text-sm text-[#1C1917] bg-[#FAFAF9] border border-[#E7E5E4] focus:border-[#1B93A4] focus:bg-white rounded-xl py-1.5 outline-none font-sans"
             />
             <span className="text-xs font-bold text-zinc-500 font-sans">
@@ -1076,8 +1075,8 @@ export const RoomsView: React.FC = () => {
                     <input
                       type="number"
                       min={1}
-                      value={totalInventory}
-                      onChange={(e) => setTotalInventory(Number(e.target.value))}
+                      value={totalInventory === 0 ? '' : totalInventory}
+                      onChange={(e) => setTotalInventory(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="ds-input w-full"
                     />
                   </div>
@@ -1125,8 +1124,8 @@ export const RoomsView: React.FC = () => {
                         <input
                           type="number"
                           min={0}
-                          value={beds[key] || 0}
-                          onChange={(e) => handleBedChange(key, Number(e.target.value))}
+                          value={beds[key] === 0 ? '' : beds[key]}
+                          onChange={(e) => handleBedChange(key, e.target.value === '' ? 0 : Number(e.target.value))}
                           className="w-14 h-10 text-center font-medium text-sm border border-zinc-200 rounded-[12px] bg-[#FAFAF9] focus:bg-white focus:border-[#1B93A4] focus:outline-none transition appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
@@ -1159,8 +1158,8 @@ export const RoomsView: React.FC = () => {
                       <input
                         type="number"
                         min={0}
-                        value={extraBeds.foldable || 0}
-                        onChange={(e) => handleExtraBedChange('foldable', Number(e.target.value))}
+                        value={extraBeds.foldable === 0 ? '' : extraBeds.foldable}
+                        onChange={(e) => handleExtraBedChange('foldable', e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-14 h-10 text-center font-medium text-sm border border-zinc-200 rounded-[12px] bg-[#FAFAF9] focus:bg-white focus:border-[#1B93A4] focus:outline-none transition appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
@@ -1174,8 +1173,8 @@ export const RoomsView: React.FC = () => {
                       <input
                         type="number"
                         min={0}
-                        value={extraBeds.floor || 0}
-                        onChange={(e) => handleExtraBedChange('floor', Number(e.target.value))}
+                        value={extraBeds.floor === 0 ? '' : extraBeds.floor}
+                        onChange={(e) => handleExtraBedChange('floor', e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-14 h-10 text-center font-medium text-sm border border-zinc-200 rounded-[12px] bg-[#FAFAF9] focus:bg-white focus:border-[#1B93A4] focus:outline-none transition appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
@@ -1187,8 +1186,8 @@ export const RoomsView: React.FC = () => {
 
                   <div className="flex items-center justify-between pt-4 border-t border-zinc-100 mt-2">
                     <label className="text-xs font-semibold text-[#78716C] uppercase tracking-widest shrink-0">Minimum Guests</label>
-                    <input type="number" min={1} value={minOccupancy}
-                      onChange={(e) => setMinOccupancy(Number(e.target.value))}
+                    <input type="number" min={1} value={minOccupancy === 0 ? '' : minOccupancy}
+                      onChange={(e) => setMinOccupancy(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="ds-input w-24 text-center" />
                   </div>
                 </div>
@@ -1223,7 +1222,7 @@ export const RoomsView: React.FC = () => {
                                 type="number"
                                 min={100}
                                 value={priceTiers[guestsKey] === 0 ? '' : (priceTiers[guestsKey] ?? '')}
-                                onChange={(e) => handlePriceTierChange(guestsKey, Number(e.target.value))}
+                                onChange={(e) => handlePriceTierChange(guestsKey, e.target.value === '' ? 0 : Number(e.target.value))}
                                 className="ds-input w-full pl-6 text-xs"
                               />
                             </div>
@@ -1245,8 +1244,8 @@ export const RoomsView: React.FC = () => {
                   <label className="ds-overline block">Room Size (sq ft)</label>
                   <div className="relative">
                     <Maximize className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A8A29E]" />
-                    <input type="number" min={10} value={sizeSqft}
-                      onChange={(e) => setSizeSqft(Number(e.target.value))}
+                    <input type="number" min={10} value={sizeSqft === 0 ? '' : sizeSqft}
+                      onChange={(e) => setSizeSqft(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="ds-input w-full pl-8" />
                   </div>
                 </div>

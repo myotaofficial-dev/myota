@@ -5,6 +5,7 @@ import { BentoGallery } from '../ui/bento-gallery';
 import { StaggerTestimonials } from '@/components/ui/stagger-testimonials';
 import InteractiveSelector from '@/components/ui/interactive-selector';
 import { FullGalleryModal } from '@/components/ui/FullGalleryModal';
+import { TravelCard } from '@/components/ui/card-7';
 import {
   Star, Phone, Mail,
   MapPin, Check, ChevronRight, X, Sparkles, MessageCircle,
@@ -51,47 +52,99 @@ const getRoomPriceForGuests = (room: any, guestCount: number) => {
   return match;
 };
 
-const distributeGuests = (roomsList: any[], guestCount: number) => {
-  const distribution = roomsList.map(() => 0);
+
+
+const distributeAdultsAndChildren = (roomsList: any[], adults: number, children: number) => {
+  const distribution = roomsList.map(() => ({ adults: 0, children: 0 }));
   if (roomsList.length === 0) return distribution;
   
-  let remaining = guestCount;
-  
-  // Phase 1: Give 1 guest to each room first (activation)
-  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
-    distribution[i] = 1;
-    remaining--;
+  let remainingAdults = adults;
+  let remainingChildren = children;
+
+  // Phase 1: Give 1 adult to each room first (activation)
+  for (let i = 0; i < roomsList.length && remainingAdults > 0; i++) {
+    distribution[i].adults = 1;
+    remainingAdults--;
   }
   
-  // Fill up to base occupancy or capacityAdults
-  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
-    const cap = (roomsList[i].base_occupancy || roomsList[i].capacityAdults || 2);
-    const space = Math.max(0, cap - distribution[i]);
-    const add = Math.min(space, remaining);
-    distribution[i] += add;
-    remaining -= add;
+  // If we ran out of adults, use children to activate remaining rooms
+  if (remainingAdults === 0) {
+    for (let i = 0; i < roomsList.length && remainingChildren > 0; i++) {
+      if (distribution[i].adults === 0) {
+        distribution[i].children = 1;
+        remainingChildren--;
+      }
+    }
   }
   
-  // Fill up to max capacity including children
-  for (let i = 0; i < roomsList.length && remaining > 0; i++) {
-    const cap = (roomsList[i].capacityAdults || 2) + (roomsList[i].capacityChildren || 1);
-    const space = Math.max(0, cap - distribution[i]);
-    const add = Math.min(space, remaining);
-    distribution[i] += add;
-    remaining -= add;
+  // Phase 2: Fill up to base occupancy (adults first, then children)
+  for (let i = 0; i < roomsList.length; i++) {
+    const baseOcc = roomsList[i].base_occupancy || roomsList[i].capacityAdults || 2;
+    
+    // Fill with adults up to base occupancy
+    const currentGuests = distribution[i].adults + distribution[i].children;
+    const adultSpace = Math.max(0, baseOcc - currentGuests);
+    const addAdults = Math.min(adultSpace, remainingAdults);
+    distribution[i].adults += addAdults;
+    remainingAdults -= addAdults;
+    
+    // Fill with children up to base occupancy
+    const currentGuestsAfterAdults = distribution[i].adults + distribution[i].children;
+    const childSpace = Math.max(0, baseOcc - currentGuestsAfterAdults);
+    const addChilds = Math.min(childSpace, remainingChildren);
+    distribution[i].children += addChilds;
+    remainingChildren -= addChilds;
   }
   
-  // Fallback: put in first room
-  if (remaining > 0) {
-    distribution[0] += remaining;
+  // Phase 3: Fill up to max capacity
+  for (let i = 0; i < roomsList.length; i++) {
+    const maxCap = (roomsList[i].capacityAdults || 2) + (roomsList[i].capacityChildren || 1);
+    
+    // Fill with adults up to max capacity
+    const currentGuests = distribution[i].adults + distribution[i].children;
+    const adultSpace = Math.max(0, maxCap - currentGuests);
+    const addAdults = Math.min(adultSpace, remainingAdults);
+    distribution[i].adults += addAdults;
+    remainingAdults -= addAdults;
+    
+    // Fill with children up to max capacity
+    const currentGuestsAfterAdults = distribution[i].adults + distribution[i].children;
+    const childSpace = Math.max(0, maxCap - currentGuestsAfterAdults);
+    const addChilds = Math.min(childSpace, remainingChildren);
+    distribution[i].children += addChilds;
+    remainingChildren -= addChilds;
+  }
+  
+  // Fallback: put remaining guests in the first room
+  if (remainingAdults > 0) {
+    distribution[0].adults += remainingAdults;
+  }
+  if (remainingChildren > 0) {
+    distribution[0].children += remainingChildren;
   }
   
   return distribution;
 };
 
+const getRecommendationDescription = (roomList: any[], distribution: any[]) => {
+  const parts = roomList.map((room, idx) => {
+    const dist = distribution[idx] || { adults: 1, children: 0 };
+    const totalGuestsInRoom = dist.adults + dist.children;
+    const baseOcc = room.base_occupancy || room.capacityAdults || 2;
+    const extraBedsNeeded = Math.max(0, totalGuestsInRoom - baseOcc);
+    
+    let desc = `${room.bedType || 'Queen Bed'}`;
+    if (extraBedsNeeded > 0) {
+      desc += ` + ${extraBedsNeeded} Extra Bed${extraBedsNeeded > 1 ? 's' : ''}`;
+    }
+    return `${room.name} (${desc})`;
+  });
+  return parts.join(' and ');
+};
+
 export const OrganicTemplate: React.FC = () => {
   const {
-    hotelInfo, rooms, pricing, addons, coupons,
+    hotelInfo, rooms, pricing, addons, coupons, bookings,
     testimonials, faqs, policies, addBooking, canvasMode, setSelectedView, setEditorFocus,
     guestEvents, customPages, previewPath, setPreviewPath,
     managedPhotos
@@ -103,8 +156,8 @@ export const OrganicTemplate: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Booking Widget States
-  const [checkIn, setCheckIn] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
-  const [checkOut, setCheckOut] = useState(format(addDays(new Date(), 3), 'yyyy-MM-dd'));
+  const [checkIn, setCheckIn] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [checkOut, setCheckOut] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '');
   const [promoCode, setPromoCode] = useState('');
 
@@ -116,8 +169,11 @@ export const OrganicTemplate: React.FC = () => {
   // Standalone Event Booking drawer state
   const [isEventBookingOpen, setIsEventBookingOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [eventGuestsCount, setEventGuestsCount] = useState(1);
   const [eventBookingStep, setEventBookingStep] = useState<'details' | 'success'>('details');
+  const [eventSelectedSlotId, setEventSelectedSlotId] = useState<string>('');
+  const [eventAdultsCount, setEventAdultsCount] = useState(1);
+  const [eventChildrenCount, setEventChildrenCount] = useState(0);
+  const [eventChildrenAges, setEventChildrenAges] = useState<number[]>([]);
 
   // Guest details form
   const [guestName, setGuestName] = useState('');
@@ -147,6 +203,7 @@ export const OrganicTemplate: React.FC = () => {
 
   // Review read-more popup
   const [reviewPopupContent, setReviewPopupContent] = useState<{ author: string; content: string; rating: number; stayDate: string } | null>(null);
+  const [popoverCombo, setPopoverCombo] = useState<any | null>(null);
 
   // Full gallery modal
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
@@ -173,6 +230,210 @@ export const OrganicTemplate: React.FC = () => {
     ? selectedRoomsList 
     : (rooms.find(r => r.id === selectedRoomId) ? [rooms.find(r => r.id === selectedRoomId)!] : []);
   const selectedEvent = guestEvents.find(e => e.id === selectedEventId);
+
+  const formatTime12h = (time24: string) => {
+    if (!time24) return '';
+    const parts = time24.split(':');
+    if (parts.length < 2) return time24;
+    let hr = parseInt(parts[0]);
+    const min = parts[1];
+    const ampm = hr >= 12 ? 'PM' : 'AM';
+    hr = hr % 12;
+    if (hr === 0) hr = 12;
+    return `${String(hr).padStart(2, '0')}:${min} ${ampm}`;
+  };
+
+  const convertToDDMMYYYY = (dStr: string) => {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 2 && parts[2].length === 4) {
+        return dStr;
+      }
+      if (parts[0].length === 4) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+    }
+    return dStr;
+  };
+
+  const calculateEventBookingPrice = (evt: any, adults: number, childAges: number[]) => {
+    if (!evt) return 0;
+    const disc = evt.discount ?? 0;
+    const baseAdult = evt.priceAdult ?? evt.price ?? 0;
+    const baseChild = evt.priceChild ?? evt.price ?? 0;
+
+    const adultPrice = disc > 0 ? Math.round(baseAdult * (1 - disc / 100)) : baseAdult;
+    const childPrice = disc > 0 ? Math.round(baseChild * (1 - disc / 100)) : baseChild;
+
+    const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+    const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
+    const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+
+    let total = adults * adultPrice;
+    childAges.forEach(age => {
+      if (age > maxAge) {
+        total += adultPrice;
+      } else if (age > minAge) {
+        total += childPrice;
+      } else {
+        total += 0; // Free for age <= minAge
+      }
+    });
+
+    return total;
+  };
+
+  const renderEventPrice = (evt: any) => {
+    const originalPrice = evt.priceAdult ?? evt.price ?? 0;
+    const disc = evt.discount ?? 0;
+    if (disc > 0) {
+      const discountedPrice = Math.round(originalPrice * (1 - disc / 100));
+      return (
+        <span className="flex items-center gap-1">
+          <span className="line-through text-zinc-400 font-normal">₹{originalPrice.toLocaleString('en-IN')}</span>
+          <span className="text-[#E07A5F] font-black">₹{discountedPrice.toLocaleString('en-IN')}</span>
+          <span className="text-red-650 font-extrabold text-[8.5px]">({disc}% OFF)</span>
+        </span>
+      );
+    }
+    return <span className="text-[#E07A5F] font-black">₹{originalPrice.toLocaleString('en-IN')}</span>;
+  };
+
+  const renderEventChildPrice = (evt: any) => {
+    const originalPrice = evt.priceChild ?? evt.price ?? 0;
+    const disc = evt.discount ?? 0;
+    if (disc > 0) {
+      const discountedPrice = Math.round(originalPrice * (1 - disc / 100));
+      return (
+        <span className="flex items-center gap-1">
+          <span className="line-through text-zinc-400 font-normal">₹{originalPrice.toLocaleString('en-IN')}</span>
+          <span className="text-zinc-650 font-bold">₹{discountedPrice.toLocaleString('en-IN')}</span>
+        </span>
+      );
+    }
+    return <span className="text-zinc-650 font-bold">₹{originalPrice.toLocaleString('en-IN')}</span>;
+  };
+
+  const [comboValidationError, setComboValidationError] = useState<string | null>(null);
+
+  const calculateAllRoomsStayPrice = (roomList: any[], effAdults: number, effChildren: number) => {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const nights = differenceInDays(end, start);
+    if (isNaN(nights) || nights <= 0) return 0;
+
+    const distribution = distributeAdultsAndChildren(roomList, effAdults, effChildren);
+    
+    let total = 0;
+    roomList.forEach((room, idx) => {
+      const roomPricing = pricing[room.id] || {};
+      const dist = distribution[idx] || { adults: 1, children: 0 };
+      
+      const baseOcc = room.base_occupancy || room.capacityAdults || 2;
+      const baseAdults = Math.min(dist.adults, baseOcc);
+      const baseChildren = Math.min(dist.children, baseOcc - baseAdults);
+      const baseGuests = baseAdults + baseChildren;
+      
+      const extraAdults = dist.adults - baseAdults;
+      const extraChildren = dist.children - baseChildren;
+      
+      const baseRate = getRoomPriceForGuests(room, baseGuests);
+      const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
+      const extraChildRate = hotelInfo.extraChildRate ?? 0;
+      const extraCostPerNight = (extraAdults * extraAdultRate) + (extraChildren * extraChildRate);
+      
+      for (let i = 0; i < nights; i++) {
+        const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
+        const override = roomPricing[dateStr];
+        const dayBasePrice = override && override.price > 0 ? override.price : baseRate;
+        total += dayBasePrice + extraCostPerNight;
+      }
+    });
+    return total;
+  };
+
+  const checkTooManyRooms = (selectedRooms: any[], adults: number, children: number) => {
+    if (selectedRooms.length <= 1) return null;
+    
+    for (let i = 0; i < selectedRooms.length; i++) {
+      const remainingRooms = [...selectedRooms];
+      remainingRooms.splice(i, 1);
+      
+      const remainingAdultsCap = remainingRooms.reduce((sum, r) => sum + (r.capacityAdults || 2), 0);
+      const remainingChildrenCap = remainingRooms.reduce((sum, r) => sum + (r.capacityChildren || 0), 0);
+      
+      if (remainingAdultsCap >= adults && (remainingAdultsCap + remainingChildrenCap) >= (adults + children)) {
+        return {
+          enoughRoomsCount: remainingRooms.length,
+          message: `You have selected too many rooms. Minimum ${remainingRooms.length} room${remainingRooms.length > 1 ? 's are' : ' is'} enough for your group.`
+        };
+      }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    setComboValidationError(null);
+  }, [selectedRoomsList, adultsCount, childrenCount, selectedRoomId]);
+
+  const getAvailableSlots = (evt: any, slotId?: string) => {
+    if (!evt) return 0;
+
+    // 1. If event has no slots configured, use the main event capacity
+    if (!evt.slots || evt.slots.length === 0) {
+      const bookingsForEvent = bookings.filter(b => 
+        b.roomId === `event-booking-${evt.id}` && 
+        b.bookingStatus !== 'cancelled'
+      );
+      const standaloneCount = bookingsForEvent.reduce((sum, b) => sum + (b.adults ?? 1) + (b.children ?? 0), 0);
+
+      const roomBookingsWithEvent = bookings.filter(b => 
+        b.roomId !== 'event-booking' && 
+        !b.roomId.startsWith('event-booking-') &&
+        b.bookingStatus !== 'cancelled' &&
+        b.addons && 
+        b.addons.some(a => a.startsWith(`Event: ${evt.title}`))
+      );
+      const roomBookingsCount = roomBookingsWithEvent.reduce((sum, b) => sum + (b.adults ?? 1) + (b.children ?? 0), 0);
+
+      const totalBooked = standaloneCount + roomBookingsCount;
+      return Math.max(0, evt.capacity - totalBooked);
+    }
+
+    // 2. If slotId is specified, check that slot
+    if (slotId) {
+      const slot = evt.slots.find((s: any) => s.id === slotId);
+      if (!slot) return 0;
+      
+      const bookingsForSlot = bookings.filter(b => 
+        b.roomId === `event-booking-${evt.id}` && 
+        b.bookingStatus !== 'cancelled' &&
+        b.selectedSlot === slotId
+      );
+      const standaloneCount = bookingsForSlot.reduce((sum, b) => sum + (b.adults ?? 1) + (b.children ?? 0), 0);
+
+      const slotTimeRange = `${formatTime12h(slot.fromTime)} - ${formatTime12h(slot.toTime)}`;
+      const roomBookingsWithSlot = bookings.filter(b => 
+        b.roomId !== 'event-booking' && 
+        !b.roomId.startsWith('event-booking-') &&
+        b.bookingStatus !== 'cancelled' &&
+        b.addons && 
+        b.addons.includes(`Event: ${evt.title} (${slotTimeRange})`)
+      );
+      const roomBookingsCount = roomBookingsWithSlot.reduce((sum, b) => sum + (b.adults ?? 1) + (b.children ?? 0), 0);
+
+      const totalBooked = standaloneCount + roomBookingsCount;
+      return Math.max(0, slot.capacity - totalBooked);
+    }
+
+    // 3. Return sum of available space across all slots
+    let totalAvail = 0;
+    evt.slots.forEach((s: any) => {
+      totalAvail += getAvailableSlots(evt, s.id);
+    });
+    return totalAvail;
+  };
 
   // Auto cycle hero carousel
   useEffect(() => {
@@ -218,40 +479,36 @@ export const OrganicTemplate: React.FC = () => {
 
     // Helper to calculate total price for a room list for the selected dates
     const getRoomListPrice = (roomList: any[]) => {
-      const start = new Date(checkIn);
-      const end = new Date(checkOut);
-      const nights = differenceInDays(end, start);
-      if (isNaN(nights) || nights <= 0) return 0;
+      const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+      const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
+      const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
 
-      // Distribute guests among the rooms
-      const distribution = distributeGuests(roomList, totalRequired);
+      const payingChildren = childrenAges.filter(age => age > minAge && age <= maxAge).length;
+      const adultChildren = childrenAges.filter(age => age > maxAge).length;
 
-      let total = 0;
-      roomList.forEach((room, idx) => {
-        const roomPricing = pricing[room.id] || {};
-        const roomGuests = distribution[idx] || 1;
-        const basePrice = getRoomPriceForGuests(room, roomGuests);
+      const effAdults = adultsCount + adultChildren;
+      const effChildren = payingChildren;
 
-        for (let i = 0; i < nights; i++) {
-          const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
-          const override = roomPricing[dateStr];
-          const dayPrice = override && override.price > 0 ? override.price : basePrice;
-          total += dayPrice;
-        }
-      });
-      return total;
+      return calculateAllRoomsStayPrice(roomList, effAdults, effChildren);
     };
 
     // 1. Single Room Recommendations
     rooms.forEach(room => {
-      const capacity = room.capacityAdults || 2;
-      if (capacity >= totalRequired) {
+      const maxCap = (room.capacityAdults || 2) + (room.capacityChildren || 1);
+      const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+      const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+      const adultChildren = childrenAges.filter(age => age > maxAge).length;
+      const effAdults = adultsCount + adultChildren;
+
+      if (maxCap >= totalRequired && (room.capacityAdults || 2) >= effAdults) {
+        const distribution = distributeAdultsAndChildren([room], effAdults, totalRequired - effAdults);
+        const desc = getRecommendationDescription([room], distribution);
         recommendations.push({
           type: 'single',
           rooms: [room],
           price: getRoomListPrice([room]),
           label: room.name,
-          description: `Single Suite: Comfortably fits your group of ${totalRequired} guests.`
+          description: desc
         });
       }
     });
@@ -267,14 +524,25 @@ export const OrganicTemplate: React.FC = () => {
           continue;
         }
 
-        const combinedCapacity = (r1.capacityAdults || 2) + (r2.capacityAdults || 2);
-        if (combinedCapacity >= totalRequired) {
+        const maxCap1 = (r1.capacityAdults || 2) + (r1.capacityChildren || 1);
+        const maxCap2 = (r2.capacityAdults || 2) + (r2.capacityChildren || 1);
+        const combinedCapacity = maxCap1 + maxCap2;
+        const combinedAdultsCapacity = (r1.capacityAdults || 2) + (r2.capacityAdults || 2);
+        
+        const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+        const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+        const adultChildren = childrenAges.filter(age => age > maxAge).length;
+        const effAdults = adultsCount + adultChildren;
+
+        if (combinedCapacity >= totalRequired && combinedAdultsCapacity >= effAdults) {
+          const distribution = distributeAdultsAndChildren([r1, r2], effAdults, totalRequired - effAdults);
+          const desc = getRecommendationDescription([r1, r2], distribution);
           recommendations.push({
             type: 'combo',
             rooms: [r1, r2],
             price: getRoomListPrice([r1, r2]),
             label: r1.id === r2.id ? `2x ${r1.name}` : `${r1.name} + ${r2.name}`,
-            description: `Combo option: 2 separate adjacent rooms.`
+            description: desc
           });
         }
       }
@@ -316,62 +584,30 @@ export const OrganicTemplate: React.FC = () => {
 
     const effectiveAdults = adultsCount + adultChildren;
     const effectiveChildren = payingChildren;
-    const totalRequiredGuests = effectiveAdults + effectiveChildren;
 
-    // 2. Distribute guests to selected rooms
-    const distribution = distributeGuests(currentSelectedRooms, totalRequiredGuests);
-
-    // 3. Room subtotal (with pricing tiers + calendar overrides)
-    let subtotal = 0;
-    currentSelectedRooms.forEach((room, idx) => {
-      const roomPricing = pricing[room.id] || {};
-      const roomGuestsCount = distribution[idx] || 1;
-      const basePrice = getRoomPriceForGuests(room, roomGuestsCount);
-
-      for (let i = 0; i < nights; i++) {
-        const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
-        const override = roomPricing[dateStr];
-        const dayPrice = override && override.price > 0 ? override.price : basePrice;
-        subtotal += dayPrice;
-      }
-    });
+    // 2. Room subtotal (with pricing tiers + calendar overrides + extra beds)
+    const subtotal = calculateAllRoomsStayPrice(currentSelectedRooms, effectiveAdults, effectiveChildren);
 
     let addonTotal = 0;
     selectedAddons.forEach(addonName => {
-      const addon = addons.find(a => a.name === addonName);
-      if (addon) {
-        if (addon.pricingType === 'per_head') {
-          const totalGuests = Math.max(1, adultsCount + childrenCount);
-          addonTotal += addon.price * totalGuests;
-        } else {
-          addonTotal += addon.price;
+      if (addonName.startsWith('Event: ')) {
+        const cleanTitle = addonName.replace('Event: ', '').split(' (')[0];
+        const evt = guestEvents.find(e => e.title === cleanTitle);
+        if (evt) {
+          addonTotal += calculateEventBookingPrice(evt, adultsCount, childrenAges);
+        }
+      } else {
+        const addon = addons.find(a => a.name === addonName);
+        if (addon) {
+          if (addon.pricingType === 'per_head') {
+            const totalGuests = Math.max(1, adultsCount + childrenCount);
+            addonTotal += addon.price * totalGuests;
+          } else {
+            addonTotal += addon.price;
+          }
         }
       }
     });
-
-    // 4. Extra bed calculations based on base occupancy
-    let totalBaseOccupancy = 0;
-    currentSelectedRooms.forEach(room => {
-      totalBaseOccupancy += room.base_occupancy ?? room.capacityAdults ?? 2;
-    });
-
-    let extraAdultsCount = 0;
-    let extraChildrenCount = 0;
-
-    if (effectiveAdults > totalBaseOccupancy) {
-      extraAdultsCount = effectiveAdults - totalBaseOccupancy;
-      extraChildrenCount = effectiveChildren;
-    } else {
-      const remBase = totalBaseOccupancy - effectiveAdults;
-      extraChildrenCount = Math.max(0, effectiveChildren - remBase);
-    }
-
-    const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
-    const extraChildRate = hotelInfo.extraChildRate ?? 0;
-    const extraBedTotal = ((extraAdultsCount * extraAdultRate) + (extraChildrenCount * extraChildRate)) * nights;
-
-    // Add extra bed rates to subtotal
-    subtotal += extraBedTotal;
 
     // 5. Meal Plan calculation
     let mealPlanTotal = 0;
@@ -429,7 +665,7 @@ export const OrganicTemplate: React.FC = () => {
   const handleCreateBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName || !guestEmail || currentSelectedRooms.length === 0) return;
-
+ 
     addBooking({
       roomId: currentSelectedRooms.map(r => r.id).join(','),
       roomName: currentSelectedRooms.map(r => r.name).join(' + '),
@@ -442,32 +678,55 @@ export const OrganicTemplate: React.FC = () => {
       paymentStatus: 'paid',
       bookingStatus: 'confirmed',
       addons: selectedAddons,
-      couponCode: appliedCouponCode || undefined
+      couponCode: appliedCouponCode || undefined,
+      adults: adultsCount,
+      children: childrenCount
     });
-
+ 
     const ref = `OG-${Math.floor(1000 + Math.random() * 9000)}`;
     setConfirmedBookingRef(ref);
     setBookingStep('success');
   };
-
+ 
   const handleCreateEventBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName || !guestEmail || !selectedEvent) return;
+ 
+    if (selectedEvent.slots && selectedEvent.slots.length > 0 && !eventSelectedSlotId) {
+      alert('Please select a timing slot.');
+      return;
+    }
+
+    const availSlots = selectedEvent.slots && selectedEvent.slots.length > 0
+      ? getAvailableSlots(selectedEvent, eventSelectedSlotId)
+      : getAvailableSlots(selectedEvent);
+
+    const totalGuests = eventAdultsCount + eventChildrenCount;
+    if (totalGuests > availSlots) {
+      alert(`Sorry, only ${availSlots} slots are available.`);
+      return;
+    }
+
+    const priceTotal = calculateEventBookingPrice(selectedEvent, eventAdultsCount, eventChildrenAges);
 
     addBooking({
-      roomId: 'event-booking',
+      roomId: `event-booking-${selectedEvent.id}`,
       roomName: `Day Event: ${selectedEvent.title}`,
       guestName,
       guestEmail,
       guestPhone,
       checkIn: selectedEvent.date || selectedEvent.fromDate || '',
       checkOut: selectedEvent.date || selectedEvent.toDate || selectedEvent.fromDate || '',
-      totalPrice: selectedEvent.price * eventGuestsCount,
+      totalPrice: priceTotal,
       paymentStatus: 'paid',
       bookingStatus: 'confirmed',
-      addons: []
+      addons: [],
+      adults: eventAdultsCount,
+      children: eventChildrenCount,
+      selectedSlot: eventSelectedSlotId || undefined
     });
-
+ 
+    setConfirmedBookingRef(`EV-${Math.floor(1000 + Math.random() * 9000)}`);
     setEventBookingStep('success');
   };
 
@@ -827,54 +1086,56 @@ export const OrganicTemplate: React.FC = () => {
             <p className="text-[11px] text-zinc-400 lowercase tracking-wider font-light">Book individually — no room reservation needed</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {guestEvents.map((evt) => (
-              <div key={evt.id} className="bg-white border border-[#D8E2DC] rounded-2xl overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] hover:border-[#8FA89B]/60 transition duration-300 ease-out text-left cursor-pointer">
-                {/* Event Photo */}
-                <div className="h-44 bg-zinc-100 relative">
-                  <img src={evt.image} alt={evt.title} className="w-full h-full object-cover" />
-                  <span className="absolute top-2.5 left-2.5 bg-zinc-950/70 text-[#E07A5F] text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                    {evt.category}
-                  </span>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {guestEvents.map((evt) => {
+              const originalPrice = evt.priceAdult ?? 0;
+              const disc = evt.discount ?? 0;
+              const discountedPrice = disc > 0 ? Math.round(originalPrice * (1 - disc / 100)) : originalPrice;
+              const dateText = convertToDDMMYYYY(evt.fromDate || evt.date || '');
+              const toDateText = evt.toDate && evt.fromDate !== evt.toDate ? ` → ${convertToDDMMYYYY(evt.toDate)}` : '';
+              const formattedDate = `${dateText}${toDateText} | ${evt.time}`;
+              const slotsVal = getAvailableSlots(evt);
+              const slotsText = slotsVal === 0 ? 'SOLD OUT' : slotsVal <= 5 ? `${slotsVal} LEFT!` : `${slotsVal} SLOTS`;
+              const isSoldOut = slotsVal === 0;
 
-                {/* Info & Booking button */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <h4 className="text-4xs font-bold text-[#3D405B] uppercase leading-tight">{evt.title}</h4>
-                    <p className="text-5xs text-zinc-550 leading-relaxed font-sans">{evt.description}</p>
-
-                    {/* Date range + Time + Price */}
-                    <div className="pt-2 border-t border-zinc-100 space-y-1.5 text-[8px] font-extrabold uppercase text-[#556B2F] font-sans">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3 h-3 text-zinc-400 shrink-0" />
-                        <span className="text-zinc-500 font-bold">
-                          {evt.fromDate ? evt.fromDate : evt.date || ''}
-                          {evt.toDate && evt.fromDate !== evt.toDate ? ` → ${evt.toDate}` : ''}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-zinc-400" /> {evt.time}</span>
-                        <span className="text-[#E07A5F] text-4xs font-black">₹{evt.price} / GUEST</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={(e) => {
+              return (
+                <div key={evt.id} className="relative">
+                  <TravelCard
+                    imageUrl={evt.image}
+                    imageAlt={evt.title}
+                    discountPercent={disc}
+                    title={evt.title}
+                    location={formattedDate}
+                    overview={evt.description || ''}
+                    longDescription={evt.aboutText || evt.longDescription || ''}
+                    price={discountedPrice}
+                    originalPrice={disc > 0 ? originalPrice : undefined}
+                    pricePeriod="per adult day pass"
+                    slotsAvailableText={slotsText}
+                    isSoldOut={isSoldOut}
+                    onBookNow={(e) => {
                       e.stopPropagation();
+                      if (evt.target === 'room_guest') {
+                        alert('This event can only be booked along with a room booking.');
+                        return;
+                      }
                       setSelectedEventId(evt.id);
-                      setEventGuestsCount(1);
+                      setEventSelectedSlotId('');
+                      setEventAdultsCount(1);
+                      setEventChildrenCount(0);
+                      setEventChildrenAges([]);
                       setEventBookingStep('details');
                       setIsEventBookingOpen(true);
                     }}
-                    className="w-full py-3 bg-[#3D405B] hover:bg-[#2d304a] active:scale-[0.97] text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition duration-200 cursor-pointer shadow-sm"
-                  >
-                    Book Day Pass
-                  </button>
+                  />
+                  {evt.target === 'room_guest' && (
+                    <div className="absolute top-3 right-3 bg-amber-500/90 text-white font-extrabold text-[8px] uppercase px-2.5 py-0.5 rounded-full select-none z-10 shadow-md border border-amber-400">
+                      Room Guest Only
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -1744,6 +2005,97 @@ export const OrganicTemplate: React.FC = () => {
         </div>
       )}
 
+      {/* Combo Details & Room Photos Popover Modal */}
+      {popoverCombo && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4 font-sans text-left">
+          <div className="bg-[#FAF6F0] w-full max-w-lg rounded-3xl border border-[#8FA89B]/40 shadow-xl overflow-hidden flex flex-col max-h-[70vh] animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-4 border-b border-[#D8E2DC] flex items-center justify-between bg-[#EBF0EC]">
+              <h4 className="font-bold text-[#3D405B] text-xs uppercase tracking-wider">
+                Room Details: {popoverCombo.label}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setPopoverCombo(null)}
+                className="p-1 rounded-lg text-zinc-550 hover:bg-zinc-200/50 hover:text-zinc-900 transition cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {Array.from(new Set(popoverCombo.rooms.map((r: any) => r.id))).map((roomId) => {
+                const room = popoverCombo.rooms.find((r: any) => r.id === roomId)!;
+                const occurrences = popoverCombo.rooms.filter((r: any) => r.id === roomId).length;
+                
+                return (
+                  <div key={room.id} className="space-y-4 pb-5 border-b border-zinc-200 last:border-0 last:pb-0">
+                    <div>
+                      <h5 className="font-extrabold text-[#3D405B] text-xs uppercase tracking-wider">
+                        {room.name} {occurrences > 1 ? `(x${occurrences})` : ''}
+                      </h5>
+                      <p className="text-[10px] text-zinc-400 mt-1 leading-normal font-sans">{room.description}</p>
+                    </div>
+
+                    {/* Room Photos */}
+                    {room.photos && room.photos.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[8px] text-zinc-400 font-extrabold uppercase tracking-wider block">Room Photos</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {room.photos.slice(0, 3).map((photoUrl: string, pIdx: number) => (
+                            <div key={pIdx} className="h-28 rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50">
+                              <img src={photoUrl} alt={`${room.name} ${pIdx + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Details grid */}
+                    <div className="grid grid-cols-2 gap-3 text-[9px] bg-white border border-zinc-150 p-3 rounded-xl font-sans font-bold">
+                      <div>
+                        <span className="text-zinc-400 block text-[7px] uppercase font-bold tracking-wider">Bed Configuration</span>
+                        <span className="text-[#3D405B] font-extrabold">{room.bedType || 'Double Bed'}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 block text-[7px] uppercase font-bold tracking-wider">Room Area</span>
+                        <span className="text-[#3D405B] font-extrabold">{room.sizeSqft || 300} Sq. Ft.</span>
+                      </div>
+                    </div>
+
+                    {/* Amenities list */}
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[8px] text-zinc-400 font-extrabold uppercase tracking-wider block">Standard Amenities</span>
+                        <div className="flex flex-wrap gap-1">
+                          {room.amenities.map((am: string, aIdx: number) => (
+                            <span key={aIdx} className="bg-[#EBF0EC] text-[#55826A] text-[8px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                              {am}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-[#D8E2DC] bg-[#FAF6F0] shrink-0 text-center">
+              <button
+                type="button"
+                onClick={() => setPopoverCombo(null)}
+                className="w-full py-2.5 bg-[#8FA89B] text-white text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-[#7D9689] transition cursor-pointer"
+              >
+                Got It, Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Full Gallery Modal */}
       {isGalleryOpen && (
         <FullGalleryModal
@@ -1762,12 +2114,12 @@ export const OrganicTemplate: React.FC = () => {
           <div className="bg-[#FAF6F0] w-full max-w-md rounded-t-3xl border-t border-[#8FA89B] overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom duration-300">
             {/* Header */}
             <div className="p-4 border-b border-[#D8E2DC] flex items-center justify-between bg-[#EBF0EC]">
-              <h3 className="font-bold text-[#3D405B] text-xs flex items-center gap-1.5 uppercase tracking-wide">
-                <Sparkles className="w-4 h-4 text-[#8FA89B]" />
+              <h3 className="font-extrabold text-[#3D405B] text-sm flex items-center gap-1.5 uppercase tracking-wide">
+                <Sparkles className="w-4.5 h-4.5 text-[#8FA89B]" />
                 <span>Reserve Room Checkout</span>
               </h3>
-              <button onClick={() => setIsBookingOpen(false)} className="p-1 rounded-lg text-zinc-500 hover:text-zinc-900 transition cursor-pointer">
-                <X className="w-4.5 h-4.5" />
+              <button onClick={() => setIsBookingOpen(false)} className="p-1 rounded-lg text-zinc-550 hover:text-[#3D405B] transition cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1777,14 +2129,14 @@ export const OrganicTemplate: React.FC = () => {
                 <form onSubmit={handleCreateBooking} className="space-y-4 text-xs">
                   {/* Step indicators */}
                   <div className="flex items-center justify-between border-b border-zinc-200 pb-3 mb-2 shrink-0">
-                    <span className="text-[10px] font-black uppercase text-zinc-400 font-sans">
+                    <span className="text-[12px] font-black uppercase text-zinc-500 font-sans">
                       Step {checkoutStep} of 3
                     </span>
                     <div className="flex gap-1">
                       {[1, 2, 3].map(step => (
                         <div
                           key={step}
-                          className={`w-4 h-1 rounded-full transition-all duration-300 ${
+                          className={`h-1.5 rounded-full transition-all duration-300 ${
                             checkoutStep === step ? 'bg-[#8FA89B] w-7' : 'bg-zinc-200'
                           }`}
                         />
@@ -1796,53 +2148,53 @@ export const OrganicTemplate: React.FC = () => {
                   {checkoutStep === 1 && (
                     <div className="space-y-4 animate-in fade-in duration-300">
                       {/* Integrated Date Picker in Styled Bar */}
-                      <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-3xs text-[#333D29] font-bold tracking-wider uppercase">
+                      <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-xs text-[#333D29] font-extrabold tracking-wider uppercase">
                         <div className="relative text-left flex-1">
-                          <span className="text-[8px] text-zinc-400 block mb-0.5">CHECK-IN</span>
+                          <span className="text-[10px] text-zinc-500 block mb-0.5 font-extrabold">CHECK-IN</span>
                           <input
                             type="date"
                             value={checkIn}
                             onChange={(e) => setCheckIn(e.target.value)}
-                            className="bg-transparent border-0 p-0 text-[11px] font-extrabold text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                            className="bg-transparent border-0 p-0 text-[13px] font-black text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
                           />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-[#8FA89B] shrink-0 mx-2" />
+                        <ChevronRight className="w-4.5 h-4.5 text-[#8FA89B] shrink-0 mx-2" />
                         <div className="relative text-left flex-1">
-                          <span className="text-[8px] text-zinc-400 block mb-0.5">CHECK-OUT</span>
+                          <span className="text-[10px] text-zinc-500 block mb-0.5 font-extrabold">CHECK-OUT</span>
                           <input
                             type="date"
                             value={checkOut}
                             onChange={(e) => setCheckOut(e.target.value)}
-                            className="bg-transparent border-0 p-0 text-[11px] font-extrabold text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                            className="bg-transparent border-0 p-0 text-[13px] font-black text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
                           />
                         </div>
                         <div className="text-right shrink-0 ml-2">
-                          <span className="text-[8px] text-zinc-400 block">LENGTH</span>
-                          <span>{totals.nights} Nights</span>
+                          <span className="text-[10px] text-zinc-500 block font-extrabold">LENGTH</span>
+                          <span className="text-[13px] font-black">{totals.nights} Nights</span>
                         </div>
                       </div>
 
                       {/* Occupancy Counters with +/- */}
                       <div className="grid grid-cols-2 gap-4">
                         {/* Adults */}
-                        <div className="bg-white border border-zinc-200 p-3 rounded-2xl flex items-center justify-between">
+                        <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
                           <div>
-                            <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Adults</span>
-                            <span className="text-[9px] text-zinc-400 block">Age 18+</span>
+                            <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Adults</span>
+                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 18+</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
                               onClick={() => setAdultsCount(prev => Math.max(1, prev - 1))}
-                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                             >
                               -
                             </button>
-                            <span className="w-4 text-center font-bold text-xs text-[#3D405B]">{adultsCount}</span>
+                            <span className="w-5 text-center font-black text-sm text-[#3D405B]">{adultsCount}</span>
                             <button
                               type="button"
                               onClick={() => setAdultsCount(prev => Math.min(10, prev + 1))}
-                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                             >
                               +
                             </button>
@@ -1850,24 +2202,24 @@ export const OrganicTemplate: React.FC = () => {
                         </div>
 
                         {/* Children */}
-                        <div className="bg-white border border-zinc-200 p-3 rounded-2xl flex items-center justify-between">
+                        <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
                           <div>
-                            <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Children</span>
-                            <span className="text-[9px] text-zinc-400 block">Age 0-17</span>
+                            <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Children</span>
+                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 0-17</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
                               onClick={() => handleChildrenCountChange(Math.max(0, childrenCount - 1))}
-                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                             >
                               -
                             </button>
-                            <span className="w-4 text-center font-bold text-xs text-[#3D405B]">{childrenCount}</span>
+                            <span className="w-5 text-center font-black text-sm text-[#3D405B]">{childrenCount}</span>
                             <button
                               type="button"
                               onClick={() => handleChildrenCountChange(Math.min(5, childrenCount + 1))}
-                              className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer text-xs"
+                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                             >
                               +
                             </button>
@@ -1877,12 +2229,12 @@ export const OrganicTemplate: React.FC = () => {
 
                       {/* Child Ages specifiers */}
                       {childrenCount > 0 && (
-                        <div className="bg-white border border-[#D8E2DC] p-3.5 rounded-2xl space-y-2 animate-in slide-in-from-top-2 duration-205">
-                          <span className="text-[8px] text-zinc-455 font-bold uppercase block font-sans">Specify Child Ages</span>
-                          <div className="grid grid-cols-3 gap-2.5">
+                        <div className="bg-white border border-[#D8E2DC] p-4 rounded-2xl space-y-2.5 animate-in slide-in-from-top-2 duration-205">
+                          <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase block font-sans tracking-wide">Specify Child Ages</span>
+                          <div className="grid grid-cols-3 gap-3">
                             {childrenAges.map((age, idx) => (
                               <div key={idx} className="space-y-1">
-                                <label className="text-[7px] text-zinc-400 font-bold block font-sans">Child {idx + 1} Age</label>
+                                <label className="text-[9px] text-zinc-450 font-bold block font-sans uppercase">Child {idx + 1} Age</label>
                                 <select
                                   value={age}
                                   onChange={(e) => {
@@ -1890,7 +2242,7 @@ export const OrganicTemplate: React.FC = () => {
                                     newAges[idx] = Number(e.target.value);
                                     setChildrenAges(newAges);
                                   }}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-4xs text-zinc-800 outline-none focus:border-blue-400 transition"
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-2xs font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
                                 >
                                   {[...Array(18)].map((_, a) => (
                                     <option key={a} value={a}>{a} yrs</option>
@@ -1904,9 +2256,9 @@ export const OrganicTemplate: React.FC = () => {
 
                       {/* Smart Recommendations Section */}
                       <div className="space-y-2">
-                        <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Smart Suite Recommendations</span>
+                        <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Smart Suite Recommendations</span>
                         {recommendations.length === 0 ? (
-                          <p className="text-[10px] text-rose-500 font-bold">No matches fit your group size. Use Custom Combo builder below.</p>
+                          <p className="text-[11px] text-rose-500 font-bold">No matches fit your group size. Use Custom Combo builder below.</p>
                         ) : (
                           <div className="space-y-2">
                             {recommendations.map((rec, idx) => {
@@ -1930,17 +2282,41 @@ export const OrganicTemplate: React.FC = () => {
                                 >
                                   <div className="flex justify-between items-start">
                                     <div className="max-w-[70%]">
-                                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                      <span className={`text-[10px] font-black uppercase px-2.5 py-0.8 rounded-full ${
                                         rec.type === 'combo' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                                       }`}>
                                         {rec.type === 'combo' ? 'Combo Option' : 'Single Room Option'}
                                       </span>
-                                      <h4 className="font-bold text-[#3D405B] text-xs pt-1.5 leading-snug">{rec.label}</h4>
-                                      <p className="text-[10px] text-zinc-400 leading-normal mt-0.5">{rec.description}</p>
+                                      <h4 className="font-extrabold text-[#3D405B] text-[13.5px] pt-1.5 leading-snug">{rec.label}</h4>
+                                      <p className="text-xs text-zinc-500 leading-normal mt-0.5">{rec.description}</p>
+
+                                      {/* Room Thumbnail Photos Grid */}
+                                      <div className="flex gap-2 mt-2 overflow-x-auto py-0.5 scrollbar-none">
+                                        {Array.from(new Set(rec.rooms.flatMap(r => r.photos || []))).slice(0, 3).map((photoUrl, pIdx) => (
+                                          <img
+                                            key={pIdx}
+                                            src={photoUrl}
+                                            alt="Room thumbnail"
+                                            className="w-24 h-16 object-cover rounded-xl border border-zinc-200 shadow-2xs"
+                                          />
+                                        ))}
+                                      </div>
+
+                                      {/* Know More Button */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPopoverCombo(rec);
+                                        }}
+                                        className="text-[11px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-2.5 block cursor-pointer"
+                                      >
+                                        Know More & Plan Details
+                                      </button>
                                     </div>
                                     <div className="text-right shrink-0">
-                                      <span className="text-[11px] font-black text-[#E07A5F] block">₹{rec.price.toLocaleString('en-IN')}</span>
-                                      <span className="text-[8px] text-zinc-400">total stay</span>
+                                      <span className="text-sm font-black text-[#E07A5F] block">₹{rec.price.toLocaleString('en-IN')}</span>
+                                      <span className="text-[10px] text-zinc-450 font-semibold">total stay</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1953,8 +2329,8 @@ export const OrganicTemplate: React.FC = () => {
                       {/* Custom Combo Builder (Make Your Own Combo) */}
                       <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3 text-left">
                         <div>
-                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Make Your Own Combo</span>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
+                          <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Make Your Own Combo</span>
+                          <p className="text-xs text-zinc-500 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
                         </div>
                         <div className="space-y-2">
                           {rooms.map(room => {
@@ -1962,7 +2338,7 @@ export const OrganicTemplate: React.FC = () => {
                             return (
                               <div key={room.id} className="flex items-center justify-between py-1.5 border-b border-zinc-50 last:border-0">
                                 <div>
-                                  <span className="font-bold text-[#3D405B] text-2xs block uppercase">{room.name}</span>
+                                  <span className="font-extrabold text-[#3D405B] text-xs block uppercase">{room.name}</span>
                                   <span className="text-[9px] text-[#E07A5F] font-semibold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1999,10 +2375,34 @@ export const OrganicTemplate: React.FC = () => {
                         </div>
                       </div>
 
+                      {comboValidationError && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-600 text-[10.5px] p-3 rounded-xl font-bold leading-normal font-sans text-left mt-3">
+                          ⚠️ {comboValidationError}
+                        </div>
+                      )}
+
                       {/* Next button */}
                       <button
                         type="button"
-                        onClick={() => setCheckoutStep(2)}
+                        onClick={() => {
+                          const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+                          const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
+                          const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+
+                          const payingChildren = childrenAges.filter(age => age > minAge && age <= maxAge).length;
+                          const adultChildren = childrenAges.filter(age => age > maxAge).length;
+
+                          const effAdults = adultsCount + adultChildren;
+                          const effChildren = payingChildren;
+
+                          const tooMany = checkTooManyRooms(currentSelectedRooms, effAdults, effChildren);
+                          if (tooMany) {
+                            setComboValidationError(tooMany.message);
+                          } else {
+                            setComboValidationError(null);
+                            setCheckoutStep(2);
+                          }
+                        }}
                         disabled={currentSelectedRooms.length === 0}
                         className="w-full py-2.5 bg-[#3D405B] hover:bg-[#2d304a] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -2101,6 +2501,166 @@ export const OrganicTemplate: React.FC = () => {
                       ) : (
                         <p className="text-[10px] text-zinc-400">No addons configured yet.</p>
                       )}
+
+                      {/* Event Packages (Optional) */}
+                      {(() => {
+                        const start = new Date(checkIn);
+                        const end = new Date(checkOut);
+                        const stayEvents = guestEvents.filter(evt => {
+                          const evtDate = new Date(evt.date || evt.fromDate);
+                          return evtDate >= start && evtDate <= end && evt.target !== 'outside_guest';
+                        });
+
+                        if (stayEvents.length === 0) return null;
+
+                        return (
+                          <div className="space-y-2 mt-4 pt-4 border-t border-zinc-200">
+                            <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Scheduled Events During Your Stay</span>
+                            <div className="space-y-2.5">
+                              {stayEvents.map(evt => {
+                                // Find any selected key starting with "Event: evt.title"
+                                const matchedKey = Object.keys(addonQuantities).find(k => k.startsWith(`Event: ${evt.title}`));
+                                const qty = matchedKey ? addonQuantities[matchedKey] : 0;
+                                
+                                // Determine selected slot from matchedKey if it has parenthesis
+                                const selectedSlotTime = matchedKey && matchedKey.includes(' (')
+                                  ? matchedKey.split(' (')[1].replace(')', '')
+                                  : '';
+
+                                // Find matching slot id to calculate slot-specific available capacity
+                                const selectedSlotObj = evt.slots?.find((s: any) => 
+                                  `${formatTime12h(s.fromTime)} - ${formatTime12h(s.toTime)}` === selectedSlotTime
+                                );
+                                const remaining = getAvailableSlots(evt, selectedSlotObj?.id);
+                                const isSoldOut = remaining === 0;
+
+                                return (
+                                  <div
+                                    key={evt.id}
+                                    className={`flex flex-col p-3 border rounded-2xl bg-white text-left transition ${
+                                      qty > 0 ? 'border-[#8FA89B] bg-[#FAF6F0]/20' : 'border-zinc-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="pr-2 max-w-[65%]">
+                                        <span className="block font-bold uppercase text-[#3D405B] truncate text-3xs">{evt.title}</span>
+                                        <span className="text-[8px] text-zinc-400 leading-none block mt-0.5 line-clamp-1">{evt.description}</span>
+                                        <span className="text-[7.5px] font-semibold text-zinc-450 block mt-1">
+                                          📅 {convertToDDMMYYYY(evt.date || evt.fromDate)}
+                                        </span>
+                                        {qty > 0 && selectedSlotTime && (
+                                          <span className="text-[7.5px] font-extrabold text-[#556B2F] block mt-0.5">
+                                            ⏰ SLOT: {selectedSlotTime}
+                                          </span>
+                                        )}
+                                        {remaining <= 5 && !isSoldOut && (
+                                          <span className="text-[7px] font-extrabold text-rose-500 uppercase tracking-wider block mt-0.5 animate-pulse">
+                                            🔥 Only {remaining} slots left!
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2.5 shrink-0">
+                                        <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">
+                                          {(() => {
+                                            const baseAdult = evt.priceAdult ?? evt.price ?? 0;
+                                            const disc = evt.discount ?? 0;
+                                            if (disc > 0) {
+                                              const discounted = Math.round(baseAdult * (1 - disc / 100));
+                                              return (
+                                                <span className="flex items-center gap-1">
+                                                  <span className="line-through text-zinc-400 font-normal">₹{baseAdult}</span>
+                                                  <span className="text-[#E07A5F]">₹{discounted}</span>
+                                                </span>
+                                              );
+                                            }
+                                            return `₹${baseAdult}`;
+                                          })()}
+                                          <span className="text-[8px] font-normal text-zinc-400 lowercase ml-0.5">/guest</span>
+                                        </span>
+                                        
+                                        {isSoldOut && !qty ? (
+                                          <span className="text-[8px] font-bold text-rose-500 uppercase tracking-wide">Sold Out</span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setAddonQuantities(prev => {
+                                                const next = { ...prev };
+                                                if (matchedKey) {
+                                                  delete next[matchedKey];
+                                                } else {
+                                                  // Select default slot if defined
+                                                  if (evt.slots && evt.slots.length > 0) {
+                                                    const s = evt.slots[0];
+                                                    const sTime = `${formatTime12h(s.fromTime)} - ${formatTime12h(s.toTime)}`;
+                                                    next[`Event: ${evt.title} (${sTime})`] = 1;
+                                                  } else {
+                                                    next[`Event: ${evt.title}`] = 1;
+                                                  }
+                                                }
+                                                return next;
+                                              });
+                                            }}
+                                            className={`w-6 h-6 rounded-full flex items-center justify-center border transition cursor-pointer ${
+                                              qty > 0
+                                                ? 'bg-[#8FA89B] border-[#8FA89B] text-white'
+                                                : 'border-zinc-300 bg-white hover:border-[#8FA89B]'
+                                            }`}
+                                          >
+                                            {qty > 0 ? (
+                                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                              </svg>
+                                            ) : (
+                                              <span className="text-zinc-400 text-xs font-light">+</span>
+                                            )}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Timing Slot selector dropdown inside addon item */}
+                                    {evt.slots && evt.slots.length > 0 && qty > 0 && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-1">
+                                        <label className="text-[8px] text-[#556B2F] font-extrabold uppercase block tracking-wider">Select Timing Slot</label>
+                                        <select
+                                          value={selectedSlotTime}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAddonQuantities(prev => {
+                                              const next = { ...prev };
+                                              if (matchedKey) {
+                                                delete next[matchedKey];
+                                              }
+                                              if (val) {
+                                                next[`Event: ${evt.title} (${val})`] = 1;
+                                              } else {
+                                                next[`Event: ${evt.title}`] = 1;
+                                              }
+                                              return next;
+                                            });
+                                          }}
+                                          className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[9.5px] text-zinc-800"
+                                        >
+                                          {evt.slots.map((s: any) => {
+                                            const avail = getAvailableSlots(evt, s.id);
+                                            const sTime = `${formatTime12h(s.fromTime)} - ${formatTime12h(s.toTime)}`;
+                                            return (
+                                              <option key={s.id} value={sTime} disabled={avail === 0 && sTime !== selectedSlotTime}>
+                                                {sTime} ({avail === 0 && sTime !== selectedSlotTime ? 'sold out' : `${avail} slots left`})
+                                              </option>
+                                            );
+                                          })}
+                                        </select>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Navigation buttons */}
                       <div className="grid grid-cols-2 gap-3 pt-3">
@@ -2266,96 +2826,241 @@ export const OrganicTemplate: React.FC = () => {
           <div className="bg-[#FAF6F0] w-full max-w-md rounded-t-3xl border-t border-[#8FA89B] overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-bottom duration-350">
             {/* Header */}
             <div className="p-4 border-b border-[#D8E2DC] flex items-center justify-between bg-[#EBF0EC]">
-              <h3 className="font-bold text-[#3D405B] text-xs flex items-center gap-1.5 uppercase tracking-wide">
+              <h3 className="font-extrabold text-[#3D405B] text-sm flex items-center gap-1.5 uppercase tracking-wide">
                 <Calendar className="w-4 h-4 text-[#8FA89B]" />
                 <span>Reserve Event Pass</span>
               </h3>
-              <button onClick={() => setIsEventBookingOpen(false)} className="p-1 rounded-lg text-zinc-550 hover:text-zinc-900 transition cursor-pointer">
-                <X className="w-4.5 h-4.5" />
+              <button onClick={() => setIsEventBookingOpen(false)} className="p-1 rounded-lg text-zinc-555 hover:text-[#3D405B] transition cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Content Form */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left text-zinc-700">
-              {eventBookingStep === 'details' ? (
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left text-zinc-700">
+              {selectedEvent.target === 'room_guest' ? (
+                <div className="space-y-5 py-2">
+                  {/* Event Detail Summary Card */}
+                  <div className="p-4 bg-white border border-[#D8E2DC] rounded-2xl space-y-3 relative shadow-2xs">
+                    <span className="bg-amber-100 text-amber-800 border border-amber-250 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider">
+                      {selectedEvent.category}
+                    </span>
+                    <h4 className="font-extrabold text-[#3D405B] text-sm uppercase leading-tight pt-1">{selectedEvent.title}</h4>
+                    <p className="text-xs text-zinc-550 font-sans leading-relaxed">{selectedEvent.description}</p>
+
+                    <div className="pt-2.5 border-t border-zinc-100 flex flex-wrap gap-x-4 gap-y-1.5 text-[10px] font-extrabold uppercase text-[#556B2F]">
+                      <span className="flex items-center gap-1"><Clock className="w-4.5 h-4.5 text-zinc-400" /> {selectedEvent.time}</span>
+                      <span className="flex items-center gap-1"><Calendar className="w-4.5 h-4.5 text-zinc-400" /> {convertToDDMMYYYY(selectedEvent.fromDate || selectedEvent.date || '')}</span>
+                    </div>
+                  </div>
+
+                  {/* Exclusivity Warning Alert Box */}
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4.5 space-y-2 text-left">
+                    <div className="flex items-center gap-2 text-amber-850 font-black text-xs uppercase tracking-wide">
+                      <Sparkles className="w-4.5 h-4.5 text-amber-500 animate-pulse" />
+                      <span>Exclusively for Stay Guests</span>
+                    </div>
+                    <p className="text-xs text-zinc-650 leading-relaxed font-sans font-medium">
+                      This activity is reserved exclusively for guests staying at our resort. You can easily add passes to this event as an add-on during your room booking checkout.
+                    </p>
+                  </div>
+
+                  {/* Close button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsEventBookingOpen(false)}
+                    className="w-full py-2.5 bg-[#3D405B] hover:bg-[#2d304a] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer text-center"
+                  >
+                    Close Window
+                  </button>
+                </div>
+              ) : eventBookingStep === 'details' ? (
                 <form onSubmit={handleCreateEventBooking} className="space-y-4 text-xs font-sans">
 
                   {/* Event Detail Summary Card */}
                   <div className="p-4 bg-white border border-[#D8E2DC] rounded-2xl space-y-2 relative">
-                    <span className="bg-[#8FA89B]/10 text-[#8FA89B] border border-[#8FA89B]/25 text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider">
+                    <span className="bg-[#8FA89B]/10 text-[#8FA89B] border border-[#8FA89B]/25 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider">
                       {selectedEvent.category}
                     </span>
-                    <h4 className="font-bold text-[#3D405B] text-xs uppercase leading-tight pt-1">{selectedEvent.title}</h4>
-                    <p className="text-[10px] text-zinc-500 font-sans leading-relaxed">{selectedEvent.description}</p>
+                    <h4 className="font-extrabold text-[#3D405B] text-sm uppercase leading-tight pt-1">{selectedEvent.title}</h4>
+                    <p className="text-xs text-zinc-500 font-sans leading-relaxed">{selectedEvent.description}</p>
 
-                    <div className="pt-2.5 border-t border-zinc-100 flex flex-wrap gap-x-4 gap-y-1.5 text-[9px] font-extrabold uppercase text-[#556B2F]">
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-zinc-400" /> {selectedEvent.time}</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-zinc-400" /> {selectedEvent.date}</span>
+                    <div className="pt-2.5 border-t border-zinc-100 flex flex-wrap gap-x-4 gap-y-1.5 text-[10px] font-extrabold uppercase text-[#556B2F]">
+                      <span className="flex items-center gap-1.5"><Clock className="w-4.5 h-4.5 text-zinc-400" /> {selectedEvent.time}</span>
+                      <span className="flex items-center gap-1.5"><Calendar className="w-4.5 h-4.5 text-zinc-400" /> {convertToDDMMYYYY(selectedEvent.fromDate || selectedEvent.date || '')}</span>
                     </div>
                   </div>
 
-                  {/* Quantity selector */}
-                  <div className="flex items-center justify-between p-3 bg-white border border-[#D8E2DC] rounded-2xl">
-                    <span className="font-bold text-[#3D405B] uppercase text-[10px]">Number of Guests</span>
+                  {/* Timing Slot selector */}
+                  {selectedEvent.slots && selectedEvent.slots.length > 0 && (
+                    <div className="space-y-1.5 bg-white border border-[#D8E2DC] p-3.5 rounded-2xl">
+                      <label className="text-[10.5px] text-[#3D405B] font-extrabold uppercase block tracking-wider">Select Timing Slot</label>
+                      <select
+                        required
+                        value={eventSelectedSlotId}
+                        onChange={(e) => {
+                          setEventSelectedSlotId(e.target.value);
+                          // reset counts to prevent slot overflow errors
+                          setEventAdultsCount(1);
+                          setEventChildrenCount(0);
+                          setEventChildrenAges([]);
+                        }}
+                        className="w-full bg-[#FAF6F0] border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 font-bold"
+                      >
+                        <option value="">Choose a timing slot...</option>
+                        {selectedEvent.slots.map((s: any) => {
+                          const avail = getAvailableSlots(selectedEvent, s.id);
+                          return (
+                            <option key={s.id} value={s.id} disabled={avail === 0}>
+                              {formatTime12h(s.fromTime)} - {formatTime12h(s.toTime)} ({avail === 0 ? 'SOLD OUT' : `${avail} slots left`})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Adult count selector */}
+                  <div className="flex items-center justify-between p-3.5 bg-white border border-[#D8E2DC] rounded-2xl">
+                    <div>
+                      <span className="font-extrabold text-[#3D405B] uppercase text-[10.5px] block">Adults</span>
+                      <span className="text-[9.5px] font-bold text-zinc-450 block mt-0.5">
+                        {renderEventPrice(selectedEvent)} / guest
+                      </span>
+                    </div>
                     <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 font-bold">
                       <button
                         type="button"
-                        onClick={() => setEventGuestsCount(prev => Math.max(1, prev - 1))}
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                        onClick={() => setEventAdultsCount(prev => Math.max(1, prev - 1))}
+                        className="w-5.5 h-5.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
                       >
                         -
                       </button>
-                      <span className="w-6 text-center text-[#3D405B]">{eventGuestsCount}</span>
+                      <span className="w-6 text-center text-sm font-black text-[#3D405B]">{eventAdultsCount}</span>
                       <button
                         type="button"
-                        onClick={() => setEventGuestsCount(prev => Math.min(selectedEvent.capacity, prev + 1))}
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                        onClick={() => {
+                          const maxSlots = selectedEvent.slots && selectedEvent.slots.length > 0
+                            ? getAvailableSlots(selectedEvent, eventSelectedSlotId)
+                            : getAvailableSlots(selectedEvent);
+                          setEventAdultsCount(prev => Math.min(maxSlots - eventChildrenCount, prev + 1));
+                        }}
+                        className="w-5.5 h-5.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
                       >
                         +
                       </button>
                     </div>
                   </div>
 
+                  {/* Child count selector */}
+                  <div className="flex items-center justify-between p-3.5 bg-white border border-[#D8E2DC] rounded-2xl">
+                    <div>
+                      <span className="font-extrabold text-[#3D405B] uppercase text-[10.5px] block">Children</span>
+                      <span className="text-[9.5px] font-bold text-zinc-450 block mt-0.5">
+                        {renderEventChildPrice(selectedEvent)} / child
+                      </span>
+                    </div>
+                    <div className="flex items-center bg-[#FAF6F0] border border-[#D8E2DC] rounded-full p-0.5 font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (eventChildrenCount > 0) {
+                            const newCount = eventChildrenCount - 1;
+                            setEventChildrenCount(newCount);
+                            setEventChildrenAges(ages => ages.slice(0, newCount));
+                          }
+                        }}
+                        className="w-5.5 h-5.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                      >
+                        -
+                      </button>
+                      <span className="w-6 text-center text-sm font-black text-[#3D405B]">{eventChildrenCount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxSlots = selectedEvent.slots && selectedEvent.slots.length > 0
+                            ? getAvailableSlots(selectedEvent, eventSelectedSlotId)
+                            : getAvailableSlots(selectedEvent);
+                          if (eventAdultsCount + eventChildrenCount < maxSlots) {
+                            const newCount = eventChildrenCount + 1;
+                            setEventChildrenCount(newCount);
+                            setEventChildrenAges(ages => [...ages, 8]);
+                          }
+                        }}
+                        className="w-5.5 h-5.5 rounded-full flex items-center justify-center text-zinc-500 hover:bg-[#E8E2D6] transition"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Children Ages Specify */}
+                  {eventChildrenCount > 0 && (
+                    <div className="p-3.5 bg-white border border-[#D8E2DC] rounded-2xl space-y-2.5 font-sans">
+                      <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase block tracking-wider">Specify Children's Ages</span>
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {eventChildrenAges.map((age, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <label className="text-[9px] font-bold text-zinc-450 block uppercase">Child {idx + 1} Age</label>
+                            <select
+                              value={age}
+                              onChange={(e) => {
+                                const newAge = Number(e.target.value);
+                                setEventChildrenAges(prev => prev.map((val, i) => i === idx ? newAge : val));
+                              }}
+                              className="w-full bg-[#FAF6F0] border border-zinc-200 rounded px-1.5 py-1 text-2xs text-zinc-800 outline-hidden font-black"
+                            >
+                              {Array.from({ length: 18 }).map((_, a) => (
+                                <option key={a} value={a + 1}>{a + 1} yr{a > 0 ? 's' : ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Inputs */}
-                  <div className="space-y-1.5">
-                    <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Your Full Name</label>
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider block">Your Full Name</label>
                     <input
                       type="text"
                       required
                       placeholder="Your Name"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
-                      className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
+                      className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-hidden font-semibold"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Email Address</label>
+                  <div className="grid grid-cols-2 gap-2 text-left">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider block">Email Address</label>
                       <input
                         type="email"
                         required
                         placeholder="Email Address"
                         value={guestEmail}
                         onChange={(e) => setGuestEmail(e.target.value)}
-                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
+                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-hidden font-semibold"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider block">Phone Number</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider block">Phone Number</label>
                       <input
                         type="tel"
                         placeholder="Phone Number"
                         value={guestPhone}
                         onChange={(e) => setGuestPhone(e.target.value)}
-                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-1.8 text-xs text-zinc-800 outline-hidden"
+                        className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-hidden font-semibold"
                       />
                     </div>
                   </div>
 
-                  {/* Invoice Summary */}
-                  <div className="p-4 bg-white rounded-2xl border border-[#D8E2DC] flex justify-between font-black text-xs text-[#3D405B]">
+                  {/* Invoice Summary (INR) */}
+                  <div className="p-4 bg-white rounded-2xl border border-[#D8E2DC] flex justify-between font-black text-sm text-[#3D405B]">
                     <span>Total Day Pass Price</span>
-                    <span className="text-[#E07A5F]">${(selectedEvent.price * eventGuestsCount).toFixed(2)}</span>
+                    <span className="text-[#E07A5F]">
+                      ₹{calculateEventBookingPrice(selectedEvent, eventAdultsCount, eventChildrenAges).toLocaleString('en-IN')}
+                    </span>
                   </div>
 
                   <button
@@ -2372,6 +3077,7 @@ export const OrganicTemplate: React.FC = () => {
                   </div>
                   <div className="space-y-1.5 text-center">
                     <h4 className="font-bold text-[#3D405B] text-xs uppercase tracking-wider">Event Pass Booked!</h4>
+                    <p className="text-2xs text-[#556B2F] font-bold">Booking Ref: {confirmedBookingRef}</p>
                     <p className="text-2xs text-zinc-550 max-w-[240px] mx-auto pt-2 leading-relaxed lowercase">
                       Your day package details have been logged in the administrator bookings calendar.
                     </p>

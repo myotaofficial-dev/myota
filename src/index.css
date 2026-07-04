@@ -184,6 +184,42 @@
   grid-area: 4 / 2 / 5 / 3;
 }
 
+@theme {
+  --color-border: var(--ds-border);
+  --color-input: var(--ds-border);
+  --color-ring: var(--ds-border-focus);
+  --color-background: var(--ds-bg);
+  --color-foreground: var(--ds-text-primary);
+  --color-primary: var(--ds-primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--ds-surface-muted);
+  --color-secondary-foreground: var(--ds-text-secondary);
+  --color-accent: var(--ds-accent);
+  --color-accent-foreground: var(--ds-text-primary);
+  --color-destructive: var(--ds-destructive);
+  --color-destructive-foreground: #ffffff;
+  --color-muted: var(--ds-surface-muted);
+  --color-muted-foreground: var(--ds-text-secondary);
+  
+  --color-success: var(--ds-success);
+  --color-success-foreground: #ffffff;
+  --color-info: #6366f1;
+  --color-info-foreground: #ffffff;
+  --color-warning: var(--ds-accent);
+  --color-warning-foreground: #ffffff;
+  
+  --color-primary-soft: var(--ds-primary-subtle);
+  --color-primary-alpha: rgba(27, 147, 164, 0.1);
+  --color-destructive-soft: var(--ds-destructive-subtle);
+  --color-destructive-alpha: rgba(231, 111, 81, 0.1);
+  --color-success-soft: var(--ds-success-subtle);
+  --color-success-alpha: rgba(45, 106, 79, 0.1);
+  --color-info-soft: rgba(99, 102, 241, 0.05);
+  --color-info-alpha: rgba(99, 102, 241, 0.1);
+  --color-warning-soft: var(--ds-accent-subtle);
+  --color-warning-alpha: rgba(201, 130, 47, 0.1);
+}
+
 
 
 

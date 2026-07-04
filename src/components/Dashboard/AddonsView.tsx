@@ -178,8 +178,8 @@ export const AddonsView: React.FC = () => {
                     type="number"
                     required
                     min={10}
-                    value={price}
-                    onChange={(e) => setPrice(Number(e.target.value))}
+                    value={price === 0 ? '' : price}
+                    onChange={(e) => setPrice(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="ds-input w-full pl-7"
                   />
                 </div>

@@ -734,12 +734,12 @@ export const DomainView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5 text-left">
           <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Latitude</label>
-          <input type="number" step="any" value={latitude} onChange={e => setLatitude(Number(e.target.value))}
+          <input type="number" step="any" value={latitude === 0 ? '' : latitude} onChange={e => setLatitude(e.target.value === '' ? 0 : Number(e.target.value))}
             className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
         </div>
         <div className="space-y-1.5 text-left">
           <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Longitude</label>
-          <input type="number" step="any" value={longitude} onChange={e => setLongitude(Number(e.target.value))}
+          <input type="number" step="any" value={longitude === 0 ? '' : longitude} onChange={e => setLongitude(e.target.value === '' ? 0 : Number(e.target.value))}
             className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
         </div>
       </div>

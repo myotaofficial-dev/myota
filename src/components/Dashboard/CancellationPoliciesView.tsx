@@ -289,7 +289,7 @@ export const CancellationPoliciesView: React.FC = () => {
                     placeholder="XX"
                     value={formXX === 0 ? '' : formXX}
                     onChange={(e) => {
-                      const val = Number(e.target.value);
+                      const val = e.target.value === '' ? 0 : Number(e.target.value);
                       setFormXX(val);
                       if (val > formYY) setFormError(null);
                     }}
@@ -311,7 +311,7 @@ export const CancellationPoliciesView: React.FC = () => {
                     placeholder="YY"
                     value={formYY === 0 ? '' : formYY}
                     onChange={(e) => {
-                      const val = Number(e.target.value);
+                      const val = e.target.value === '' ? 0 : Number(e.target.value);
                       setFormYY(val);
                       if (formXX > val) setFormError(null);
                     }}
@@ -376,7 +376,7 @@ export const CancellationPoliciesView: React.FC = () => {
           <input
             type="number"
             value={localDiscountAmount === 0 ? '' : localDiscountAmount}
-            onChange={(e) => setLocalDiscountAmount(Number(e.target.value))}
+            onChange={(e) => setLocalDiscountAmount(e.target.value === '' ? 0 : Number(e.target.value))}
             placeholder="0"
             className="w-24 text-center font-bold text-sm text-[#1C1917] bg-[#FAFAF9] border border-[#E7E5E4] focus:border-[#1B93A4] focus:bg-white rounded-xl px-2 py-1.5 outline-none font-sans"
           />
