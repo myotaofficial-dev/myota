@@ -147,14 +147,14 @@ export const CustomPagesView: React.FC = () => {
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between text-left">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900">Custom Web Pages</h2>
-          <p className="text-sm text-zinc-500">Create standalone pages (like blogs, restaurant menu tables, or banquet layouts) that attach to your menu bar.</p>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Custom Web Pages</h2>
+          <p className="text-sm text-[#78716C]">Create standalone pages (like blogs, restaurant menu tables, or banquet layouts) that attach to your menu bar.</p>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-zinc-955 font-semibold px-4 py-2 rounded-lg text-sm shadow-md transition cursor-pointer"
+          className="ds-btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           <span>Create Page</span>
@@ -164,16 +164,16 @@ export const CustomPagesView: React.FC = () => {
       {/* Pages List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {customPages.map(page => (
-          <div key={page.id} className="bg-white rounded-xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4">
+          <div key={page.id} className="ds-card p-5 flex flex-col justify-between space-y-4">
             <div className="space-y-2 text-left">
               <div className="flex items-center justify-between">
-                <span className="bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+                <span className="ds-badge ds-badge-teal text-[9px] font-black uppercase tracking-wider">
                   {page.type || 'custom'}
                 </span>
-                <span className={`h-2.5 w-2.5 rounded-full block ${page.active ? 'bg-emerald-500' : 'bg-zinc-300'}`} title={page.active ? 'Active' : 'Draft'}></span>
+                <span className={`h-2.5 w-2.5 rounded-full block ${page.active ? 'bg-[#1B93A4]' : 'bg-zinc-300'}`} title={page.active ? 'Active' : 'Draft'}></span>
               </div>
-              <h3 className="font-bold text-zinc-900 text-base">{page.title}</h3>
-              <p className="text-zinc-500 text-xs line-clamp-2 leading-relaxed">
+              <h3 className="font-bold text-[#1C1917] text-base" style={{ fontFamily: 'Outfit, sans-serif' }}>{page.title}</h3>
+              <p className="text-[#78716C] text-xs line-clamp-2 leading-relaxed">
                 {page.type === 'restaurant' && `Restaurant layout with ${page.restaurantMenu?.length || 0} menu items.`}
                 {page.type === 'banquet' && `Banquet Hall layout supporting up to ${page.banquetCapacity || 150} guests.`}
                 {page.type === 'blog' && `Blog layout with ${page.blogPosts?.length || 0} articles published.`}
@@ -183,15 +183,15 @@ export const CustomPagesView: React.FC = () => {
               
               {/* Slug link info */}
               <div className="flex items-center gap-1.5 text-[10px] text-zinc-450 font-semibold pt-1">
-                <Link className="w-3.5 h-3.5" />
+                <Link className="w-3.5 h-3.5 text-zinc-400" />
                 <span>/pages/{page.slug}</span>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-2">
+            <div className="pt-4 border-t border-[#E7E5E4] flex items-center justify-end gap-2">
               <button
                 onClick={() => openEditModal(page)}
-                className="p-1.5 rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-950 hover:bg-zinc-50 transition cursor-pointer"
+                className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAFAF9] transition cursor-pointer"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -201,7 +201,7 @@ export const CustomPagesView: React.FC = () => {
                     deleteCustomPage(page.id);
                   }
                 }}
-                className="p-1.5 rounded-lg border border-zinc-200 text-rose-500 hover:text-rose-600 hover:bg-rose-50/50 transition cursor-pointer"
+                className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#E76F51] hover:bg-[#FEF0ED] transition cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -210,7 +210,7 @@ export const CustomPagesView: React.FC = () => {
         ))}
 
         {customPages.length === 0 && (
-          <div className="col-span-full py-12 text-center text-zinc-400 text-xs">
+          <div className="col-span-full py-12 text-center text-[#A8A29E] text-xs">
             No custom pages configured. Click "Create Page" to get started.
           </div>
         )}
@@ -218,14 +218,14 @@ export const CustomPagesView: React.FC = () => {
 
       {/* Page Builder Modal */}
       {isEditing && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
-              <h3 className="font-bold text-zinc-900 flex items-center gap-2 text-sm">
-                <Layout className="w-5 h-5 text-amber-500" />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col border border-[#E7E5E4] animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-[#E7E5E4] flex items-center justify-between bg-[#FAFAF9]">
+              <h3 className="font-bold text-[#1C1917] flex items-center gap-2 text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                <Layout className="w-5 h-5 text-[#1B93A4]" />
                 <span>{editingId ? 'Edit Custom Page' : 'Create Custom Page'}</span>
               </h3>
-              <button onClick={() => setIsEditing(false)} className="p-1 rounded-lg hover:bg-zinc-200 text-zinc-400">
+              <button onClick={() => setIsEditing(false)} className="p-1.5 rounded-lg hover:bg-[#F5F5F4] text-[#A8A29E] hover:text-[#1C1917] transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -234,36 +234,36 @@ export const CustomPagesView: React.FC = () => {
               {/* Basic Fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Page Title</label>
+                  <label className="ds-overline block">Page Title</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Activity Center"
                     value={title}
                     onChange={(e) => handleTitleChange(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-2 text-sm text-zinc-900 outline-hidden transition"
+                    className="ds-input w-full"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">URL Slug</label>
+                  <label className="ds-overline block">URL Slug</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. activities"
                     value={slug}
                     onChange={(e) => setSlug(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-2 text-sm text-zinc-900 outline-hidden transition"
+                    className="ds-input w-full"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Layout Preset Type</label>
+                  <label className="ds-overline block">Layout Preset Type</label>
                   <select
                     value={type}
                     onChange={(e: any) => setType(e.target.value)}
-                    className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm outline-hidden focus:border-amber-500 transition"
+                    className="ds-input w-full"
                   >
                     <option value="custom">Blank Layout (Rich Text / HTML)</option>
                     <option value="restaurant">Restaurant Menu Layout</option>
@@ -284,36 +284,36 @@ export const CustomPagesView: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Page Tagline / Subtitle</label>
+                <label className="ds-overline block">Page Tagline / Subtitle</label>
                 <input
                   type="text"
                   placeholder="e.g. Fine dining overlooking the hills"
                   value={tagline}
                   onChange={(e) => setTagline(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-2 text-sm text-zinc-900 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Page Description / Summary</label>
+                <label className="ds-overline block">Page Description / Summary</label>
                 <textarea
                   placeholder="Introduce the page content to visitors..."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   rows={2}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition resize-none"
+                  className="ds-input w-full resize-none"
                 />
               </div>
 
               {/* Dynamic Preset Forms */}
               {type === 'restaurant' && (
-                <div className="space-y-4 pt-4 border-t border-zinc-200">
+                <div className="space-y-4 pt-4 border-t border-[#E7E5E4]">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-extrabold text-zinc-800 uppercase tracking-wider text-[10px]">Restaurant Menu Configuration</h4>
+                    <h4 className="ds-overline block text-[#1C1917]">Restaurant Menu Configuration</h4>
                     <button
                       type="button"
                       onClick={addMenuItemRow}
-                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-bold tracking-wide cursor-pointer"
+                      className="flex items-center gap-1.5 text-[#1B93A4] hover:text-[#157A8A] font-bold tracking-wide cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
                       <span>Add Dish</span>
@@ -322,7 +322,7 @@ export const CustomPagesView: React.FC = () => {
 
                   <div className="space-y-3">
                     {menuItems.map((item, idx) => (
-                      <div key={idx} className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-lg space-y-3 relative">
+                      <div key={idx} className="bg-[#FAFAF9] border border-[#E7E5E4] p-4 rounded-xl space-y-3 relative text-left">
                         <button
                           type="button"
                           onClick={() => removeMenuItemRow(idx)}
@@ -339,7 +339,7 @@ export const CustomPagesView: React.FC = () => {
                                 required
                                 value={item.name}
                                 onChange={(e) => updateMenuItemRow(idx, 'name', e.target.value)}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                               <input
                                 type="number"
@@ -348,7 +348,7 @@ export const CustomPagesView: React.FC = () => {
                                 min={0}
                                 value={item.price === 0 ? '' : item.price}
                                 onChange={(e) => updateMenuItemRow(idx, 'price', e.target.value === '' ? 0 : Number(e.target.value))}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                             </div>
                             <input
@@ -356,7 +356,7 @@ export const CustomPagesView: React.FC = () => {
                               placeholder="Short ingredients description..."
                               value={item.description}
                               onChange={(e) => updateMenuItemRow(idx, 'description', e.target.value)}
-                              className="w-full bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden text-xs"
+                              className="ds-input bg-white text-xs py-1.5 w-full"
                             />
                           </div>
                           <div>
@@ -374,21 +374,21 @@ export const CustomPagesView: React.FC = () => {
               )}
 
               {type === 'banquet' && (
-                <div className="space-y-4 pt-4 border-t border-zinc-200">
-                  <h4 className="font-extrabold text-zinc-800 uppercase tracking-wider text-[10px]">Banquet Hall Specifications</h4>
+                <div className="space-y-4 pt-4 border-t border-[#E7E5E4]">
+                  <h4 className="ds-overline block text-[#1C1917]">Banquet Hall Specifications</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="font-bold text-zinc-550">Maximum Guest Capacity</label>
+                      <label className="ds-overline block">Maximum Guest Capacity</label>
                       <input
                         type="number"
                         min={10}
                         value={banquetCapacity === 0 ? '' : banquetCapacity}
                         onChange={(e) => setBanquetCapacity(e.target.value === '' ? 0 : Number(e.target.value))}
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 outline-hidden"
+                        className="ds-input w-full"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="font-bold text-zinc-550">Add Hall Feature / Amenity</label>
+                      <label className="ds-overline block">Add Hall Feature / Amenity</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -396,12 +396,12 @@ export const CustomPagesView: React.FC = () => {
                           value={newFeature}
                           onChange={(e) => setNewFeature(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addFeatureTag())}
-                          className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 outline-hidden"
+                          className="ds-input flex-1"
                         />
                         <button
                           type="button"
                           onClick={addFeatureTag}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-1.5 rounded-lg cursor-pointer"
+                          className="ds-btn-primary px-4 py-1.5"
                         >
                           Add
                         </button>
@@ -410,9 +410,9 @@ export const CustomPagesView: React.FC = () => {
                   </div>
                   <div className="flex flex-wrap gap-2 pt-2">
                     {banquetFeatures.map(tag => (
-                      <span key={tag} className="bg-zinc-100 text-zinc-700 border border-zinc-200 rounded-md px-2.5 py-1 flex items-center gap-1.5 font-semibold">
+                      <span key={tag} className="ds-badge ds-badge-teal flex items-center gap-1.5 font-semibold">
                         <span>{tag}</span>
-                        <button type="button" onClick={() => removeFeatureTag(tag)} className="text-zinc-400 hover:text-rose-500 cursor-pointer">
+                        <button type="button" onClick={() => removeFeatureTag(tag)} className="text-[#1B93A4] hover:text-[#E76F51] cursor-pointer">
                           <X className="w-3 h-3" />
                         </button>
                       </span>
@@ -422,13 +422,13 @@ export const CustomPagesView: React.FC = () => {
               )}
 
               {type === 'blog' && (
-                <div className="space-y-4 pt-4 border-t border-zinc-200">
+                <div className="space-y-4 pt-4 border-t border-[#E7E5E4]">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-extrabold text-zinc-800 uppercase tracking-wider text-[10px]">Blog Articles Manager</h4>
+                    <h4 className="ds-overline block text-[#1C1917]">Blog Articles Manager</h4>
                     <button
                       type="button"
                       onClick={addBlogPostRow}
-                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-bold tracking-wide cursor-pointer"
+                      className="flex items-center gap-1.5 text-[#1B93A4] hover:text-[#157A8A] font-bold tracking-wide cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
                       <span>Write Article</span>
@@ -436,7 +436,7 @@ export const CustomPagesView: React.FC = () => {
                   </div>
                   <div className="space-y-3">
                     {blogPosts.map((post, idx) => (
-                      <div key={idx} className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-lg space-y-3 relative">
+                      <div key={idx} className="bg-[#FAFAF9] border border-[#E7E5E4] p-4 rounded-xl space-y-3 relative text-left">
                         <button
                           type="button"
                           onClick={() => removeBlogPostRow(idx)}
@@ -452,21 +452,21 @@ export const CustomPagesView: React.FC = () => {
                               required
                               value={post.title}
                               onChange={(e) => updateBlogPostRow(idx, 'title', e.target.value)}
-                              className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                              className="ds-input bg-white text-xs py-1.5 w-full"
                             />
                             <div className="grid grid-cols-2 gap-2">
                               <input
                                 type="date"
                                 value={post.date}
                                 onChange={(e) => updateBlogPostRow(idx, 'date', e.target.value)}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                               <input
                                 type="text"
                                 placeholder="Read Time (e.g. 5 min read)"
                                 value={post.readTime}
                                 onChange={(e) => updateBlogPostRow(idx, 'readTime', e.target.value)}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                             </div>
                             <textarea
@@ -475,7 +475,7 @@ export const CustomPagesView: React.FC = () => {
                               required
                               value={post.content}
                               onChange={(e) => updateBlogPostRow(idx, 'content', e.target.value)}
-                              className="w-full bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden resize-none text-xs"
+                              className="ds-input bg-white text-xs py-1.5 w-full resize-none"
                             />
                           </div>
                           <div>
@@ -493,13 +493,13 @@ export const CustomPagesView: React.FC = () => {
               )}
 
               {type === 'activities' && (
-                <div className="space-y-4 pt-4 border-t border-zinc-200">
+                <div className="space-y-4 pt-4 border-t border-[#E7E5E4]">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-extrabold text-zinc-800 uppercase tracking-wider text-[10px]">Activities Schedule</h4>
+                    <h4 className="ds-overline block text-[#1C1917]">Activities Schedule</h4>
                     <button
                       type="button"
                       onClick={addActivityRow}
-                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-bold tracking-wide cursor-pointer"
+                      className="flex items-center gap-1.5 text-[#1B93A4] hover:text-[#157A8A] font-bold tracking-wide cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
                       <span>Add Activity</span>
@@ -507,7 +507,7 @@ export const CustomPagesView: React.FC = () => {
                   </div>
                   <div className="space-y-3">
                     {activitiesList.map((activity, idx) => (
-                      <div key={idx} className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-lg space-y-3 relative">
+                      <div key={idx} className="bg-[#FAFAF9] border border-[#E7E5E4] p-4 rounded-xl space-y-3 relative text-left">
                         <button
                           type="button"
                           onClick={() => removeActivityRow(idx)}
@@ -524,14 +524,14 @@ export const CustomPagesView: React.FC = () => {
                                 required
                                 value={activity.title}
                                 onChange={(e) => updateActivityRow(idx, 'title', e.target.value)}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                               <input
                                 type="text"
                                 placeholder="Schedule / Timings"
                                 value={activity.time}
                                 onChange={(e) => updateActivityRow(idx, 'time', e.target.value)}
-                                className="bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden w-full text-xs"
+                                className="ds-input bg-white text-xs py-1.5 w-full"
                               />
                             </div>
                             <input
@@ -540,7 +540,7 @@ export const CustomPagesView: React.FC = () => {
                               required
                               value={activity.description}
                               onChange={(e) => updateActivityRow(idx, 'description', e.target.value)}
-                              className="w-full bg-white border border-zinc-200 rounded-md px-2 py-1.5 outline-hidden text-xs"
+                              className="ds-input bg-white text-xs py-1.5 w-full"
                             />
                           </div>
                           <div>
@@ -558,7 +558,7 @@ export const CustomPagesView: React.FC = () => {
               )}
 
               {/* Status Toggle */}
-              <div className="flex items-center justify-between border-t border-zinc-200 pt-4">
+              <div className="flex items-center justify-between border-t border-[#E7E5E4] pt-4 text-left">
                 <span className="font-bold text-zinc-700">Publish Page Draft</span>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -567,22 +567,22 @@ export const CustomPagesView: React.FC = () => {
                     onChange={(e) => setActive(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                  <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1B93A4]"></div>
                 </label>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200">
+              <div className="p-5 border-t border-[#E7E5E4] flex items-center justify-end gap-3 bg-[#FAFAF9] -mx-6 -mb-6">
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 border border-zinc-200 hover:bg-zinc-100 text-zinc-600 text-sm font-semibold rounded-lg transition"
+                  className="px-4 py-2 border border-[#E7E5E4] hover:bg-[#F5F5F4] text-[#78716C] text-sm font-semibold rounded-xl transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-900 text-sm font-bold rounded-lg shadow-md transition"
+                  className="ds-btn-primary"
                 >
                   {editingId ? 'Save Changes' : 'Build Custom Page'}
                 </button>

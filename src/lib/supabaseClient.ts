@@ -307,6 +307,7 @@ export type Database = {
           is_active: boolean;
           display_order: number;
           created_at: string;
+          about_text: string | null;
         };
         Insert: Omit<Database['public']['Tables']['guest_events']['Row'], 'created_at'>;
         Update: Partial<Database['public']['Tables']['guest_events']['Insert']>;

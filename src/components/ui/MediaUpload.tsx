@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, Film, Loader2 } from 'lucide-react';
+import { UploadCloud, X, Film, Loader2, AlertCircle } from 'lucide-react';
 import { uploadMediaFile } from '../../services/StorageService';
 
 interface MediaUploadProps {
@@ -19,15 +19,31 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [popupError, setPopupError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = (file: File) => {
     if (!file) return;
+    setError(null);
+    setPopupError(null);
+    
+    // File Size Validation
+    const isVideo = file.type.startsWith('video/');
+    const maxSize = isVideo ? 20 * 1024 * 1024 : 3 * 1024 * 1024;
+    
+    if (file.size > maxSize) {
+      const actualSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      const limitMB = isVideo ? '20MB' : '3MB';
+      const msg = `"${file.name}" is ${actualSizeMB}MB, which exceeds the ${limitMB} upload limit. Please compress or resize your file before uploading.`;
+      setError(msg);
+      setPopupError(msg);
+      return;
+    }
+
     setIsLoading(true);
 
-    const isImage = file.type.startsWith('image/');
-
-    if (isImage) {
+    if (!isVideo) {
       // Compress and resize image using HTML5 Canvas to save storage space & convert to WebP
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -140,6 +156,8 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const removeMedia = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
+    setError(null);
+    setPopupError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -148,11 +166,18 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const isVideo = value.startsWith('data:video/') || value.toLowerCase().endsWith('.mp4') || value.toLowerCase().endsWith('.webm') || value.toLowerCase().endsWith('.mov');
 
   return (
-    <div className={`space-y-1 text-left ${className}`}>
+    <div className={`space-y-2 text-left ${className}`}>
       {label && (
         <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">
           {label}
         </label>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg animate-in fade-in slide-in-from-top-1">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
       )}
 
       {value ? (
@@ -206,18 +231,18 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           onClick={triggerBrowse}
           className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2.5 cursor-pointer transition-all duration-300 max-w-md select-none ${
             isDragActive
-              ? 'border-amber-500 bg-amber-50/40 scale-[0.99]'
-              : 'border-zinc-250 hover:border-amber-400 hover:bg-zinc-50/50 bg-zinc-50/20'
+              ? 'border-teal-500 bg-teal-50/40 scale-[0.99]'
+              : 'border-zinc-250 hover:border-teal-400 hover:bg-zinc-50/50 bg-zinc-50/20'
           }`}
         >
           {isLoading ? (
             <div className="flex flex-col items-center gap-2 py-2">
-              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
               <span className="text-4xs text-zinc-500 font-extrabold uppercase tracking-widest">Processing file...</span>
             </div>
           ) : (
             <>
-              <div className="p-3 bg-white rounded-full border border-zinc-150 shadow-xs text-zinc-400 group-hover:text-amber-500 transition-colors">
+              <div className="p-3 bg-white rounded-full border border-zinc-150 shadow-xs text-zinc-400 group-hover:text-teal-500 transition-colors">
                 {accept.includes('video') ? (
                   <Film className="w-6 h-6" />
                 ) : (
@@ -226,14 +251,35 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
               </div>
               <div className="text-center space-y-1">
                 <p className="text-3xs font-bold text-zinc-700">
-                  Drag & drop your file here, or <span className="text-amber-600 hover:text-amber-700 font-extrabold">browse</span>
+                  Drag & drop your file here, or <span className="text-teal-600 hover:text-teal-700 font-extrabold">browse</span>
                 </p>
                 <p className="text-[9px] text-zinc-450 font-semibold uppercase tracking-wider">
-                  Supports {accept.includes('video') ? 'MP4, WebM up to 10MB' : 'PNG, JPG, WebP'}
+                  Supports {accept.includes('video') ? 'MP4, WebM up to 20MB' : 'PNG, JPG, WebP up to 3MB'}
                 </p>
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {popupError && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-[#FAF6F0] rounded-2xl p-6 max-w-sm w-full border border-[#D8E2DC] shadow-xl text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-[#3D405B] text-sm uppercase tracking-wider font-sans">Upload Error</h3>
+              <p className="text-2xs text-[#78716C] leading-relaxed font-sans">{popupError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPopupError(null)}
+              className="w-full bg-[#1B93A4] hover:bg-[#157A8A] text-white font-extrabold text-[10px] uppercase tracking-wider py-2.5 rounded-xl transition cursor-pointer"
+            >
+              Acknowledge
+            </button>
+          </div>
         </div>
       )}
 

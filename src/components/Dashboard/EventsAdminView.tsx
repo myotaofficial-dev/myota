@@ -3,6 +3,7 @@ import { useHotel } from '../../context/HotelContext';
 import type { EventSlot } from '../../context/HotelContext';
 import { Plus, Edit2, Trash2, X, Sparkles, Calendar, Users, Clock } from 'lucide-react';
 import { MediaUpload } from '../ui/MediaUpload';
+import { RichTextEditor } from './DomainView';
 
 const EVENT_PRESETS = [
   {
@@ -61,6 +62,7 @@ export const EventsAdminView: React.FC = () => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
+  const [aboutText, setAboutText] = useState('');
   const [image, setImage] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -87,6 +89,7 @@ export const EventsAdminView: React.FC = () => {
     setTitle('');
     setCategory('');
     setDescription('');
+    setAboutText('');
     setImage('');
     setFromDate(todayStr);
     setToDate(todayStr);
@@ -103,6 +106,7 @@ export const EventsAdminView: React.FC = () => {
     setTitle(evt.title);
     setCategory(evt.category);
     setDescription(evt.description);
+    setAboutText(evt.aboutText || '');
     setImage(evt.image);
     setFromDate(evt.fromDate || evt.date || '');
     setToDate(evt.toDate || evt.date || '');
@@ -126,6 +130,7 @@ export const EventsAdminView: React.FC = () => {
     setTitle(preset.title);
     setCategory(preset.category);
     setDescription(preset.description);
+    setAboutText(preset.description);
     setImage(preset.image);
     setFromDate(todayStr);
     setToDate(todayStr);
@@ -184,7 +189,8 @@ export const EventsAdminView: React.FC = () => {
       priceAdult: Number(priceAdult),
       priceChild: Number(priceChild),
       target,
-      discount: Number(discount)
+      discount: Number(discount),
+      aboutText
     };
 
     if (editingId) {
@@ -228,12 +234,12 @@ export const EventsAdminView: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900" style={{ fontFamily: 'Outfit, sans-serif' }}>Resort Events & Day Packages</h2>
-          <p className="text-sm text-zinc-500">Configure special events, activities, or day-out packages that guests can book individually.</p>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Resort Events & Day Packages</h2>
+          <p className="text-sm text-[#78716C]">Configure special events, activities, or day-out packages that guests can book individually.</p>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-amber-550 hover:bg-amber-600 text-zinc-950 font-bold px-4 py-2 rounded-lg text-xs shadow-md transition cursor-pointer"
+          className="ds-btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           <span>Create Event</span>
@@ -241,26 +247,26 @@ export const EventsAdminView: React.FC = () => {
       </div>
 
       {/* Section Title Configuration */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-3xs space-y-2">
-        <label className="text-xs font-bold text-zinc-700">Events Section Title</label>
+      <div className="ds-card p-5 space-y-2 text-left">
+        <label className="ds-overline block">Events Section Title</label>
         <p className="text-[10px] text-zinc-400">Configure the main heading of the activities and events section on the homepage.</p>
         <input 
           type="text" 
           value={hotelInfo.eventsTitle || 'Resort Packages & Scheduled Activities'} 
           onChange={(e) => updateHotelInfo({ eventsTitle: e.target.value })}
           placeholder="e.g. Resort Packages & Scheduled Activities"
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-1.5 text-xs text-zinc-900 outline-hidden transition font-sans" 
+          className="ds-input w-full" 
         />
       </div>
 
       {/* Ready-made event templates */}
-      <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4">
         <div>
-          <span className="text-[10px] uppercase font-bold tracking-widest text-blue-650 block">QUICK START</span>
-          <h3 className="text-lg font-black text-zinc-900 mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+          <span className="ds-overline block text-[#1B93A4]">QUICK START</span>
+          <h3 className="text-lg font-black text-[#1C1917] mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
             Ready-made event templates
           </h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs text-[#78716C] mt-0.5">
             Start with a seasonal preset, then add the event dates manually before saving it to this property.
           </p>
         </div>
@@ -268,9 +274,9 @@ export const EventsAdminView: React.FC = () => {
         {/* Templates horizontal grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {EVENT_PRESETS.map((preset) => (
-            <div key={preset.title} className="bg-white rounded-2xl border border-zinc-200 shadow-3xs overflow-hidden flex flex-col hover:shadow-xs transition">
+            <div key={preset.title} className="bg-white rounded-2xl border border-[#E7E5E4] shadow-3xs overflow-hidden flex flex-col hover:shadow-md transition">
               {/* Top Banner Image with text overlay */}
-              <div className="h-44 bg-zinc-100 relative">
+              <div className="h-44 bg-zinc-150 relative">
                 <img src={preset.image} alt={preset.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-4 text-left">
                   <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">
@@ -284,18 +290,18 @@ export const EventsAdminView: React.FC = () => {
 
               {/* Bottom Inclusions text */}
               <div className="p-4 flex-1 flex flex-col justify-between space-y-4 text-left">
-                <p className="text-xs text-zinc-500 line-clamp-4 leading-relaxed font-sans">
+                <p className="text-xs text-[#78716C] line-clamp-4 leading-relaxed font-sans">
                   {preset.description}
                 </p>
 
                 {/* Preset Footer */}
-                <div className="pt-3 border-t border-zinc-100 flex items-center justify-between">
+                <div className="pt-3 border-t border-[#E7E5E4] flex items-center justify-between">
                   <span className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">
                     SEASONAL PRESET
                   </span>
                   <button
                     onClick={() => applyPreset(preset)}
-                    className="px-3.5 py-1.5 rounded-full text-[10px] font-extrabold bg-[#EBF5FF] text-blue-600 hover:bg-blue-100 transition cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-full text-[10px] font-bold bg-[#E6F5F7] text-[#1B93A4] hover:bg-[#1B93A4]/15 transition cursor-pointer"
                   >
                     Use Template
                   </button>
@@ -309,11 +315,11 @@ export const EventsAdminView: React.FC = () => {
       {/* Events Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {guestEvents.map(evt => (
-          <div key={evt.id} className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition">
+          <div key={evt.id} className="ds-card overflow-hidden flex flex-col hover:shadow-md transition">
             {/* Event Photo */}
-            <div className="h-44 bg-zinc-100 relative">
+            <div className="h-44 bg-zinc-150 relative">
               <img src={evt.image} alt={evt.title} className="w-full h-full object-cover" />
-              <span className="absolute top-3 left-3 bg-blue-600 text-white text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
+              <span className="absolute top-3 left-3 bg-[#1B93A4] text-white text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
                 {evt.category}
               </span>
               <span className="absolute bottom-3 right-3 bg-zinc-950/80 text-amber-400 text-xs font-black px-2.5 py-1 rounded-lg">
@@ -324,31 +330,31 @@ export const EventsAdminView: React.FC = () => {
             {/* Details */}
             <div className="p-5 flex-1 flex flex-col justify-between">
               <div className="space-y-3">
-                <h3 className="font-bold text-zinc-900 text-sm">{evt.title}</h3>
-                <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">{evt.description}</p>
+                <h3 className="font-bold text-[#1C1917] text-sm">{evt.title}</h3>
+                <p className="text-xs text-[#78716C] line-clamp-2 leading-relaxed">{evt.description}</p>
                 
                 {/* Event Schedule Info */}
-                <div className="pt-2.5 border-t border-zinc-100 grid grid-cols-1 gap-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
+                <div className="pt-2.5 border-t border-[#E7E5E4] grid grid-cols-1 gap-2 text-[10px] text-[#78716C] font-semibold uppercase tracking-wider">
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-405 shrink-0" />
+                    <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <span className="truncate">{formatEventDate(evt)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-zinc-405 shrink-0" />
+                    <Users className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <span>Max {evt.capacity} Guests</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-zinc-405 shrink-0" />
+                    <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <span className="truncate">{evt.time}</span>
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-2 mt-4">
+              <div className="pt-4 border-t border-[#E7E5E4] flex items-center justify-end gap-2 mt-4">
                 <button
                   onClick={() => openEditModal(evt)}
-                  className="p-1.5 rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-950 hover:bg-zinc-50 transition cursor-pointer"
+                  className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAFAF9] transition cursor-pointer"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -358,7 +364,7 @@ export const EventsAdminView: React.FC = () => {
                       deleteGuestEvent(evt.id);
                     }
                   }}
-                  className="p-1.5 rounded-lg border border-zinc-200 text-rose-500 hover:text-rose-600 hover:bg-rose-50/50 transition cursor-pointer"
+                  className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#E76F51] hover:bg-[#FEF0ED] transition cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -368,7 +374,7 @@ export const EventsAdminView: React.FC = () => {
         ))}
 
         {guestEvents.length === 0 && (
-          <div className="col-span-full py-12 text-center text-zinc-400 text-xs">
+          <div className="col-span-full py-12 text-center text-[#A8A29E] text-xs">
             No events scheduled yet. Click "Create Event" to get started.
           </div>
         )}
@@ -376,241 +382,251 @@ export const EventsAdminView: React.FC = () => {
 
       {/* Editor Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 shrink-0">
-              <h3 className="font-bold text-zinc-900 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150 border border-[#E7E5E4]">
+            <div className="p-5 border-b border-[#E7E5E4] flex items-center justify-between bg-[#FAFAF9] shrink-0">
+              <h3 className="font-bold text-[#1C1917] flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                <Sparkles className="w-5 h-5 text-[#1B93A4]" />
                 <span>{editingId ? 'Edit Event Details' : 'Schedule New Event'}</span>
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-zinc-200 text-zinc-400">
+              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-[#F5F5F4] text-[#A8A29E] hover:text-[#1C1917] transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs text-left">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Event Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sunset Boat Ride & Music"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-655 uppercase tracking-wide">Category</label>
+                  <label className="ds-overline block">Event Title</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Adventure, Wellness"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
+                    placeholder="e.g. Sunset Boat Ride & Music"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="ds-input w-full"
                   />
                 </div>
-                <div className="space-y-1.5 col-span-full">
-                  <MediaUpload
-                    label="Cover Image"
-                    value={image}
-                    onChange={setImage}
-                  />
-                </div>
-              </div>
 
-              {/* Date Pickers (From Date & To Date) */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-655 uppercase tracking-wide">From Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-2 text-sm text-zinc-900 outline-hidden transition"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="ds-overline block">Category</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Adventure, Wellness"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="ds-input w-full"
+                    />
+                  </div>
+                  <div className="space-y-1.5 col-span-full">
+                    <MediaUpload
+                      label="Cover Image"
+                      value={image}
+                      onChange={setImage}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-655 uppercase tracking-wide">To Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-2 text-sm text-zinc-900 outline-hidden transition"
-                  />
-                </div>
-              </div>
 
-              {/* Timing Slots */}
-              <div className="space-y-2 border-t border-zinc-100 pt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Timing Slots</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSlots(prev => [
-                        ...prev,
-                        { id: `slot-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, fromTime: '', toTime: '', capacity: 10 }
-                      ]);
-                    }}
-                    className="px-2 py-1 rounded bg-[#EBF5FF] text-blue-600 hover:bg-blue-100 text-[10px] font-bold tracking-wide transition cursor-pointer"
-                  >
-                    + Add Slot
-                  </button>
+                {/* Date Pickers (From Date & To Date) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="ds-overline block">From Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="ds-input w-full"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="ds-overline block">To Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="ds-input w-full"
+                    />
+                  </div>
                 </div>
-                {slots.length === 0 && (
-                  <p className="text-[10px] text-zinc-450">At least one timing slot is required.</p>
-                )}
-                <div className="space-y-2">
-                  {slots.map((slot, idx) => (
-                    <div key={slot.id} className="flex items-center gap-2 bg-zinc-50 p-2.5 rounded-lg border border-zinc-200">
-                      <div className="flex-1 grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">From</label>
-                          <input
-                            type="time"
-                            required
-                            value={slot.fromTime}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSlots(prev => prev.map((s, i) => i === idx ? { ...s, fromTime: val } : s));
-                            }}
-                            className="w-full bg-white border border-zinc-200 focus:border-amber-500 rounded px-2 py-1 text-xs text-zinc-800"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">To</label>
-                          <input
-                            type="time"
-                            required
-                            value={slot.toTime}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSlots(prev => prev.map((s, i) => i === idx ? { ...s, toTime: val } : s));
-                            }}
-                            className="w-full bg-white border border-zinc-200 focus:border-amber-500 rounded px-2 py-1 text-xs text-zinc-800"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">Max Guests</label>
-                          <input
-                            type="number"
-                            required
-                            min={1}
-                            value={slot.capacity === 0 ? '' : slot.capacity}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : Number(e.target.value);
-                              setSlots(prev => prev.map((s, i) => i === idx ? { ...s, capacity: val } : s));
-                            }}
-                            className="w-full bg-white border border-zinc-200 focus:border-amber-500 rounded px-2 py-1 text-xs text-zinc-800"
-                          />
-                        </div>
-                      </div>
-                      {slots.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setSlots(prev => prev.filter((_, i) => i !== idx))}
-                          className="p-1 text-rose-500 hover:bg-rose-50 rounded mt-4 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Pricing (INR) */}
-              <div className="grid grid-cols-2 gap-4 border-t border-zinc-100 pt-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Adult Price (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={priceAdult === 0 ? '' : priceAdult}
-                    onChange={(e) => setPriceAdult(e.target.value === '' ? 0 : Number(e.target.value))}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Child Price (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={priceChild === 0 ? '' : priceChild}
-                    onChange={(e) => setPriceChild(e.target.value === '' ? 0 : Number(e.target.value))}
-                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
-                  />
-                </div>
-              </div>
-
-              {/* Target Visibility */}
-              <div className="space-y-1.5 border-t border-zinc-100 pt-3">
-                <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Target Guests</label>
-                <div className="flex gap-2 p-1 bg-zinc-100 rounded-xl">
-                  {(['all', 'room_guest', 'outside_guest'] as const).map((t) => (
+                {/* Timing Slots */}
+                <div className="space-y-2 border-t border-[#E7E5E4] pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="ds-overline block">Timing Slots</label>
                     <button
-                      key={t}
                       type="button"
-                      onClick={() => setTarget(t)}
-                      className={`flex-1 py-1.8 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                        target === t ? 'bg-[#1C1917] text-white shadow-xs' : 'text-zinc-500 hover:text-zinc-800'
-                      }`}
+                      onClick={() => {
+                        setSlots(prev => [
+                          ...prev,
+                          { id: `slot-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, fromTime: '', toTime: '', capacity: 10 }
+                        ]);
+                      }}
+                      className="px-2.5 py-1 rounded-full bg-[#E6F5F7] text-[#1B93A4] hover:bg-[#1B93A4]/15 text-[10px] font-bold tracking-wide transition cursor-pointer"
                     >
-                      {t === 'all' ? 'All' : t === 'room_guest' ? 'Room Only' : 'Outside Only'}
+                      + Add Slot
                     </button>
-                  ))}
+                  </div>
+                  {slots.length === 0 && (
+                    <p className="text-[10px] text-zinc-400">At least one timing slot is required.</p>
+                  )}
+                  <div className="space-y-2">
+                    {slots.map((slot, idx) => (
+                      <div key={slot.id} className="flex items-center gap-2 bg-[#FAFAF9] p-2.5 rounded-xl border border-[#E7E5E4]">
+                        <div className="flex-1 grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">From</label>
+                            <input
+                              type="time"
+                              required
+                              value={slot.fromTime}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSlots(prev => prev.map((s, i) => i === idx ? { ...s, fromTime: val } : s));
+                              }}
+                              className="w-full bg-white border border-[#E7E5E4] focus:border-[#1B93A4] rounded-lg px-2 py-1 text-xs text-zinc-850 outline-none transition"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">To</label>
+                            <input
+                              type="time"
+                              required
+                              value={slot.toTime}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSlots(prev => prev.map((s, i) => i === idx ? { ...s, toTime: val } : s));
+                              }}
+                              className="w-full bg-white border border-[#E7E5E4] focus:border-[#1B93A4] rounded-lg px-2 py-1 text-xs text-zinc-850 outline-none transition"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">Max Guests</label>
+                            <input
+                              type="number"
+                              required
+                              min={1}
+                              value={slot.capacity === 0 ? '' : slot.capacity}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                setSlots(prev => prev.map((s, i) => i === idx ? { ...s, capacity: val } : s));
+                              }}
+                              className="w-full bg-white border border-[#E7E5E4] focus:border-[#1B93A4] rounded-lg px-2 py-1 text-xs text-zinc-855 outline-none transition"
+                            />
+                          </div>
+                        </div>
+                        {slots.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setSlots(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-[#E76F51] hover:bg-[#FEF0ED] rounded-lg border border-[#E7E5E4] mt-4 cursor-pointer transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Discount Slider */}
-              <div className="space-y-1.5 bg-zinc-50 p-3 rounded-xl border border-zinc-200">
-                <div className="flex items-center justify-between text-xs font-bold text-zinc-650 uppercase tracking-wide">
-                  <span>Event Discount</span>
-                  <span className="text-red-650 font-extrabold text-sm">{discount}% OFF</span>
+                {/* Pricing (INR) */}
+                <div className="grid grid-cols-2 gap-4 border-t border-[#E7E5E4] pt-3">
+                  <div className="space-y-1.5">
+                    <label className="ds-overline block">Adult Price (₹)</label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={priceAdult === 0 ? '' : priceAdult}
+                      onChange={(e) => setPriceAdult(e.target.value === '' ? 0 : Number(e.target.value))}
+                      className="ds-input w-full"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="ds-overline block">Child Price (₹)</label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={priceChild === 0 ? '' : priceChild}
+                      onChange={(e) => setPriceChild(e.target.value === '' ? 0 : Number(e.target.value))}
+                      className="ds-input w-full"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={99}
-                  value={discount}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
-                  className="w-full accent-red-600 cursor-pointer"
-                />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-650 uppercase tracking-wide">Event Description</label>
-                <textarea
-                  required
-                  placeholder="Explain event details, schedules, items included, or dress codes..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition resize-none"
-                />
-              </div>
+                {/* Target Visibility */}
+                <div className="space-y-1.5 border-t border-[#E7E5E4] pt-3">
+                  <label className="ds-overline block">Target Guests</label>
+                  <div className="flex gap-2 p-1 bg-zinc-100 rounded-xl">
+                    {(['all', 'room_guest', 'outside_guest'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTarget(t)}
+                        className={`flex-1 py-1.8 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                          target === t ? 'bg-[#1C1917] text-white shadow-xs' : 'text-zinc-500 hover:text-zinc-800'
+                        }`}
+                      >
+                        {t === 'all' ? 'All' : t === 'room_guest' ? 'Room Only' : 'Outside Only'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Discount Slider */}
+                <div className="space-y-1.5 bg-[#FAFAF9] p-3 rounded-xl border border-[#E7E5E4]">
+                  <div className="flex items-center justify-between text-xs font-bold text-zinc-650 uppercase tracking-wide">
+                    <span className="ds-overline">Event Discount</span>
+                    <span className="text-[#E76F51] font-extrabold text-sm">{discount}% OFF</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={99}
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value))}
+                    className="w-full accent-[#1B93A4] cursor-pointer"
+                  />
+                </div>
+
+                 <div className="space-y-1.5">
+                  <label className="ds-overline block">Short Description</label>
+                  <p className="text-[10px] text-zinc-400">Shown in the event card list view.</p>
+                  <textarea
+                    required
+                    placeholder="Short summary of inclusions or highlights..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                    className="ds-input w-full resize-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5 col-span-full">
+                  <label className="ds-overline block">Long Description (Detailed Info)</label>
+                  <p className="text-[10px] text-zinc-400">Shown in the "Know More" popup with full details and rich formatting.</p>
+                  <RichTextEditor
+                    value={aboutText}
+                    onChange={setAboutText}
+                  />
+                </div>
 
               </div>
-              <div className="p-5 border-t border-zinc-200 flex items-center justify-end gap-3 bg-zinc-50 shrink-0">
+              <div className="p-5 border-t border-[#E7E5E4] flex items-center justify-end gap-3 bg-[#FAFAF9] shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-zinc-200 hover:bg-zinc-100 text-zinc-650 text-xs font-bold rounded-lg transition"
+                  className="px-4 py-2 border border-[#E7E5E4] hover:bg-[#F5F5F4] text-[#78716C] text-sm font-semibold rounded-xl transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-550 hover:bg-amber-600 text-zinc-950 text-xs font-bold rounded-lg shadow-xs transition"
+                  className="ds-btn-primary"
                 >
                   {editingId ? 'Save Changes' : 'Publish Event'}
                 </button>

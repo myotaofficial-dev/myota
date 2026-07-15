@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useHotel } from '../../context/HotelContext';
-import type { CoHost } from '../../context/HotelContext';
+import type { CoHost, GstSlab } from '../../context/HotelContext';
 import {
-  Info, FileText, Sparkles, MapPin, Phone, UserCheck,
-  ShieldCheck, Image, Trash2, Plus, Search, X, Pencil, Check,
+  UserCheck, ShieldCheck, Trash2, Plus, Search, X, Pencil, Check,
   Bold, Italic, Underline, Link, Code, List, ListOrdered, Quote, Undo, Redo
 } from 'lucide-react';
 import { MediaUpload } from '../ui/MediaUpload';
+import { uploadMediaFile } from '../../services/StorageService';
 
 const InstagramIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg
@@ -162,7 +162,7 @@ interface RichTextEditorProps {
   onChange: (val: string) => void;
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
+export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
   const editorRef = useRef<HTMLDivElement>(null);
 
   // Update editor innerHTML only when value changes externally,
@@ -324,8 +324,38 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
 export const DomainView: React.FC = () => {
   const {
     hotelInfo, updateHotelInfo, selectedView,
-    coHosts, addCoHost, updateCoHost, deleteCoHost
+    coHosts, addCoHost, updateCoHost, deleteCoHost,
+    addManagedPhoto, gstSettings, updateGstSettings
   } = useHotel();
+
+  // GST Settings States
+  const [roomSlabs, setRoomSlabs] = useState<GstSlab[]>(() => gstSettings?.room_slabs || []);
+  const [addonsGstRate, setAddonsGstRate] = useState<number>(() => gstSettings?.addons_rate ?? 18);
+  const [eventsGstRate, setEventsGstRate] = useState<number>(() => gstSettings?.events_rate ?? 18);
+  const [mealPlansGstRate, setMealPlansGstRate] = useState<number>(() => gstSettings?.meal_plans_rate ?? 18);
+
+  // Sync with context loaded state
+  useEffect(() => {
+    if (gstSettings) {
+      setRoomSlabs(gstSettings.room_slabs);
+      setAddonsGstRate(gstSettings.addons_rate);
+      setEventsGstRate(gstSettings.events_rate);
+      setMealPlansGstRate(gstSettings.meal_plans_rate);
+    }
+  }, [gstSettings]);
+
+  // GST Slab helpers
+  const handleAddSlab = () => {
+    setRoomSlabs(prev => [...prev, { min: 0, max: 0, rate: 0 }]);
+  };
+
+  const handleRemoveSlab = (index: number) => {
+    setRoomSlabs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSlabChange = (index: number, field: keyof GstSlab, value: number) => {
+    setRoomSlabs(prev => prev.map((slab, i) => i === index ? { ...slab, [field]: value } : slab));
+  };
 
   // Basic Info
   const [name, setName] = useState(hotelInfo.name);
@@ -374,6 +404,8 @@ export const DomainView: React.FC = () => {
   const [hostForm, setHostForm] = useState({ name: '', phone: '', role: 'manager' as CoHost['role'], canReceiveCalls: false, canAcceptBookings: false });
 
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSyncingInstagram, setIsSyncingInstagram] = useState(false);
+  const [instagramSyncError, setInstagramSyncError] = useState<string | null>(null);
 
   // Sync from context
   useEffect(() => {
@@ -405,15 +437,103 @@ export const DomainView: React.FC = () => {
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setInstagramSyncError(null);
+
+    let finalInstagramImages = hotelInfo.instagramImages || [];
+    const handleChanged = instagramHandle.trim() !== (hotelInfo.instagramHandle || '').trim();
+
+    if (selectedView === 'contact' && handleChanged) {
+      const handle = instagramHandle.trim();
+      if (!handle) {
+        finalInstagramImages = [];
+      } else {
+        setIsSyncingInstagram(true);
+        try {
+          const apifyToken = import.meta.env.VITE_APIFY_TOKEN || '';
+          const apifyResponse = await fetch(
+            `https://api.apify.com/v2/acts/apify~instagram-post-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                username: [handle],
+                resultsLimit: 5,
+              }),
+            }
+          );
+
+          if (!apifyResponse.ok) {
+            throw new Error(`Apify scraping run failed (HTTP ${apifyResponse.status})`);
+          }
+
+          const datasetItems = await apifyResponse.json();
+          if (!Array.isArray(datasetItems) || datasetItems.length === 0) {
+            throw new Error('No posts found for this Instagram handle. Please make sure the account is public.');
+          }
+
+          const uploadedUrls: string[] = [];
+
+          // Process the top 5 items (using static displayUrl/cover image for videos/reels)
+          for (let i = 0; i < Math.min(datasetItems.length, 5); i++) {
+            const item = datasetItems[i];
+            const mediaUrl = item.displayUrl || item.mediaUrl || (item.resources && item.resources[0] && item.resources[0].src);
+            if (!mediaUrl) continue;
+
+            // Fetch image via images.weserv.nl proxy (bypasses CORP/CORS and resizes/compresses to WebP on the edge)
+            const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(mediaUrl)}&output=webp&w=800&q=75`;
+            const imageRes = await fetch(proxyUrl);
+            if (!imageRes.ok) continue;
+
+            const webpBlob = await imageRes.blob();
+
+            // Upload to Supabase Storage
+            const publicUrl = await uploadMediaFile(webpBlob, `instagram_${i}.webp`);
+            uploadedUrls.push(publicUrl);
+
+            // Add to properties/media gallery database under Media->Photos
+            addManagedPhoto({
+              url: publicUrl,
+              tags: ['instagram', 'imported'],
+              isHero: false
+            });
+          }
+
+          if (uploadedUrls.length === 0) {
+            throw new Error('Failed to retrieve or upload any images from the Instagram feed.');
+          }
+
+          finalInstagramImages = uploadedUrls;
+        } catch (err: any) {
+          console.error('[Instagram Sync Failed]', err);
+          setInstagramSyncError(err.message || 'Failed to sync Instagram images.');
+          setIsSyncingInstagram(false);
+          return; // Stop saving to prevent partial saving of half-synced data
+        } finally {
+          setIsSyncingInstagram(false);
+        }
+      }
+    }
+
     updateHotelInfo({
       name, websiteHeadline, subdomain: subdomain.toLowerCase().replace(/[^a-z0-9-]/g, ''),
       customDomain, starRating, checkInTime, checkOutTime,
       phone, email, address, latitude, longitude,
       description, aboutTitle, amenitiesTitle, shortDescription, detailedDescription, logoUrl, faviconUrl, generalAmenities, tagline,
-      heroStyle, heroImages, heroVideo, instagramHandle, primaryColor, showEvents
+      heroStyle, heroImages, heroVideo, instagramHandle, primaryColor, showEvents,
+      instagramImages: finalInstagramImages
     });
+    if (selectedView === 'property') {
+      updateGstSettings({
+        room_slabs: roomSlabs,
+        addons_rate: addonsGstRate,
+        events_rate: eventsGstRate,
+        meal_plans_rate: mealPlansGstRate
+      });
+    }
     save();
   };
 
@@ -462,134 +582,258 @@ export const DomainView: React.FC = () => {
     setShowAddHost(true);
   };
 
-  const roleLabel: Record<CoHost['role'], string> = {
-    super_admin: 'Super Admin',
-    manager: 'Manager',
-    caretaker: 'Caretaker',
-  };
 
-  const roleColor: Record<CoHost['role'], string> = {
-    super_admin: 'bg-blue-100 text-blue-700',
-    manager: 'bg-amber-100 text-amber-700',
-    caretaker: 'bg-green-100 text-green-700',
-  };
 
   // ─── Sub-form renderers ───────────────────────────────────────────────────
 
   const renderBasicInfo = () => (
     <div className="space-y-6">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <Info className="w-4 h-4 text-blue-600" />
-          <span>Basic Info</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Property name, headline, branding, check-in times and domain.</p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Basic Info
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Property branding, titles, logo marks, check-in schedules, and default configuration.
+          </p>
+        </div>
       </div>
 
-      {/* Package Name + Website Headline */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Package Name</label>
-          <p className="text-5xs text-zinc-400">Internal property name. Keep it clear and searchable.</p>
-          <input type="text" value={name} onChange={e => setName(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
-        </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Website Headline</label>
-          <p className="text-5xs text-zinc-400">Customer-facing property title used across the Bolt site.</p>
-          <input type="text" value={websiteHeadline} onChange={e => setWebsiteHeadline(e.target.value)}
-            placeholder="e.g. The Grandlake Resorts : Kutty Kerala in Poolampatti"
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
+      {/* Property Name + Website Headline */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Property Name</label>
+            <p className="text-[10px] text-zinc-400">Internal property name. Keep it clear and searchable.</p>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              className="ds-input w-full" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Website Headline</label>
+            <p className="text-[10px] text-zinc-400">Customer-facing property title used across the Bolt site.</p>
+            <input type="text" value={websiteHeadline} onChange={e => setWebsiteHeadline(e.target.value)}
+              placeholder="e.g. The Grandlake Resorts : Kutty Kerala in Poolampatti"
+              className="ds-input w-full" />
+          </div>
         </div>
       </div>
 
       {/* Accent Color */}
-      <div className="space-y-2 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Accent Color</label>
-        <p className="text-5xs text-zinc-400">Used for buttons, highlights, and brand identity in the hotel theme.</p>
-        <div className="flex gap-3 items-center">
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm">Accent Brand Color</h4>
+          <p className="text-xs text-zinc-450 leading-relaxed mt-0.5">Used for buttons, highlights, and custom theme layouts.</p>
+        </div>
+        <div className="flex gap-3 items-center pt-2">
           <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
-            className="w-10 h-10 border border-zinc-200 rounded-lg cursor-pointer shrink-0" />
-          <div className="flex-1 flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
-            <div className="w-5 h-5 rounded-md border border-zinc-200" style={{ background: primaryColor }} />
-            <span className="text-xs font-mono text-zinc-700">{primaryColor.toUpperCase()}</span>
+            className="w-11 h-11 border border-[#E7E5E4] rounded-xl cursor-pointer shrink-0" />
+          <div className="flex-1 flex items-center gap-2 bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl px-3.5 py-2.5">
+            <div className="w-5 h-5 rounded-md border border-[#E7E5E4]" style={{ background: primaryColor }} />
+            <span className="text-xs font-mono text-[#78716C] font-semibold">{primaryColor.toUpperCase()}</span>
           </div>
           <button type="button" onClick={() => setPrimaryColor('#0284c7')}
-            className="text-3xs font-bold text-zinc-400 hover:text-zinc-600 px-2 py-1 border border-zinc-200 rounded-md">Reset</button>
+            className="px-3.5 py-2.5 rounded-xl border border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9] text-xs font-bold transition cursor-pointer">
+            Reset
+          </button>
         </div>
       </div>
 
       {/* Logo + Favicon */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Logo</label>
-          <p className="text-5xs text-zinc-400">Upload the main logo mark used in the top navigation and hero areas.</p>
-          <div className="border border-dashed border-zinc-300 rounded-xl p-4 bg-zinc-50 flex flex-col items-center gap-3">
-            {logoUrl
-              ? <img src={logoUrl} alt="Logo" className="max-h-16 object-contain" />
-              : <div className="w-full h-12 flex items-center justify-center text-zinc-300 text-xs font-bold">No logo uploaded</div>
-            }
-            <MediaUpload label="" value={logoUrl} onChange={setLogoUrl} />
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-zinc-700">Logo</label>
+            <p className="text-[10px] text-zinc-400">Upload the main logo mark used in navigation and headers.</p>
+            <div className="border border-dashed border-[#E7E5E4] rounded-xl p-4 bg-[#FAFAF9] flex flex-col items-center gap-3">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="max-h-16 object-contain" />
+              ) : (
+                <div className="w-full h-12 flex items-center justify-center text-zinc-355 text-xs font-semibold">No logo uploaded</div>
+              )}
+              <MediaUpload label="" value={logoUrl} onChange={setLogoUrl} />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-zinc-700">Favicon</label>
+            <p className="text-[10px] text-zinc-400">Upload a browser tab icon (square PNG, 32×32 recommended).</p>
+            <div className="border border-dashed border-[#E7E5E4] rounded-xl p-4 bg-[#FAFAF9] flex flex-col items-center gap-3">
+              {faviconUrl ? (
+                <img src={faviconUrl} alt="Favicon" className="w-8 h-8 object-contain" />
+              ) : (
+                <div className="w-8 h-8 bg-zinc-200 rounded-md flex items-center justify-center text-zinc-450 text-4xs font-bold">FAV</div>
+              )}
+              <MediaUpload label="" value={faviconUrl} onChange={setFaviconUrl} />
+            </div>
           </div>
         </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Favicon</label>
-          <p className="text-5xs text-zinc-400">Upload a compact icon for browser tabs. A square PNG of 32×32 works best.</p>
-          <div className="border border-dashed border-zinc-300 rounded-xl p-4 bg-zinc-50 flex flex-col items-center gap-3">
-            {faviconUrl
-              ? <img src={faviconUrl} alt="Favicon" className="w-8 h-8 object-contain" />
-              : <div className="w-8 h-8 bg-zinc-200 rounded-md flex items-center justify-center text-zinc-400 text-4xs">FAV</div>
-            }
-            <MediaUpload label="" value={faviconUrl} onChange={setFaviconUrl} />
+      </div>
+
+      {/* Check-in / Check-out + Star Rating */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Star Rating</label>
+            <p className="text-[10px] text-zinc-400">Official property standard rating.</p>
+            <select value={starRating} onChange={e => setStarRating(Number(e.target.value))}
+              className="ds-input w-full">
+              {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>{s} Star</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Check-In Time</label>
+            <p className="text-[10px] text-zinc-400">Standard check-in hours.</p>
+            <input type="time" value={checkInTime} onChange={e => setCheckInTime(e.target.value)}
+              className="ds-input w-full" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Check-Out Time</label>
+            <p className="text-[10px] text-zinc-400">Standard checkout deadline.</p>
+            <input type="time" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)}
+              className="ds-input w-full" />
           </div>
         </div>
       </div>
 
-      {/* Star + domain */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Star Rating</label>
-          <select value={starRating} onChange={e => setStarRating(Number(e.target.value))}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-2 text-xs text-zinc-900 outline-hidden transition">
-            {[1,2,3,4,5].map(s => <option key={s} value={s}>{s} Star</option>)}
-          </select>
+      {/* GST Settings Slabs and Rates Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-teal-650" />
+            <span>GST Configuration Rates & Slabs</span>
+          </h4>
+          <p className="text-xs text-zinc-450 leading-relaxed mt-0.5">
+            Configure room tariff GST slabs and standard tax rates for addons, events, and meal plans.
+          </p>
         </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Custom Domain</label>
-          <input type="text" placeholder="www.yourhotel.com" value={customDomain} onChange={e => setCustomDomain(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
-        </div>
-      </div>
 
-      {/* Subdomain */}
-      <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Platform Subdomain</label>
-        <div className="flex">
-          <input type="text" value={subdomain} onChange={e => setSubdomain(e.target.value)}
-            className="flex-1 bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-l-lg px-3 py-2 text-xs text-zinc-900 outline-hidden transition" />
-          <span className="bg-zinc-100 border border-l-0 border-zinc-200 rounded-r-lg px-3 py-2 text-4xs text-zinc-500 font-bold flex items-center">.boltlabs.com</span>
+        {/* Note about missing table instructions */}
+        <div className="bg-[#E6F5F7] border border-[#1B93A4]/20 rounded-xl p-3.5 text-xs text-zinc-700 space-y-1 leading-relaxed">
+          <p className="font-bold text-[#1B93A4]">💡 Database Sync Details</p>
+          <p>
+            Tax configuration values are stored directly in your Supabase database in the <code className="bg-white px-1 py-0.5 rounded font-mono text-[10px]">gst_settings</code> table.
+            If you have not done so yet, please execute the SQL queries inside <code className="bg-white px-1 py-0.5 rounded font-mono text-[10px]">create_gst_settings.sql</code> using the Supabase Dashboard SQL Editor to ensure full persistence.
+          </p>
         </div>
-      </div>
 
-      {/* Check-in / Check-out */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Check-In Time</label>
-          <input type="time" value={checkInTime} onChange={e => setCheckInTime(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-2 text-xs text-zinc-900 outline-hidden transition" />
+        {/* Room tariff slabs */}
+        <div className="space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-zinc-700">Room Tariff GST Slabs</span>
+            <button
+              type="button"
+              onClick={handleAddSlab}
+              className="text-[10px] bg-teal-50 border border-teal-200 hover:bg-teal-100 text-teal-700 font-bold px-2.5 py-1 rounded-md transition cursor-pointer animate-in fade-in"
+            >
+              + Add Slab
+            </button>
+          </div>
+          <div className="border border-zinc-200 rounded-xl overflow-hidden bg-zinc-50/50">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-zinc-100 border-b border-zinc-200 text-zinc-650 font-bold text-[10px] uppercase tracking-wider">
+                  <th className="p-3">Min Price (₹)</th>
+                  <th className="p-3">Max Price (₹)</th>
+                  <th className="p-3">GST Rate (%)</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200">
+                {roomSlabs.map((slab, index) => (
+                  <tr key={index} className="bg-white hover:bg-zinc-50/30 transition">
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        value={slab.min}
+                        onChange={e => handleSlabChange(index, 'min', Number(e.target.value))}
+                        className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2.5 py-1.5 text-xs text-zinc-800 outline-hidden font-medium"
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        value={slab.max}
+                        onChange={e => handleSlabChange(index, 'max', Number(e.target.value))}
+                        className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2.5 py-1.5 text-xs text-zinc-800 outline-hidden font-medium"
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <div className="relative rounded-lg shadow-xs">
+                        <input
+                          type="number"
+                          value={slab.rate}
+                          onChange={e => handleSlabChange(index, 'rate', Number(e.target.value))}
+                          className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg pl-2.5 pr-8 py-1.5 text-xs text-zinc-800 outline-hidden font-medium"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400 font-bold text-xs">%</div>
+                      </div>
+                    </td>
+                    <td className="p-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSlab(index)}
+                        disabled={roomSlabs.length <= 1}
+                        className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 p-2 rounded-lg border border-transparent disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Check-Out Time</label>
-          <input type="time" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-2 text-xs text-zinc-900 outline-hidden transition" />
+
+        {/* Other Item Rates */}
+        <div className="pt-4 border-t border-zinc-150 space-y-4">
+          <span className="text-xs font-bold text-zinc-700 block">Flat GST Rates for Other Services</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Add-ons GST (%)</label>
+              <div className="relative rounded-xl">
+                <input
+                  type="number"
+                  value={addonsGstRate}
+                  onChange={e => setAddonsGstRate(Number(e.target.value))}
+                  className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-zinc-800 outline-hidden font-sans font-medium"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400 font-bold text-xs">%</div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Events GST (%)</label>
+              <div className="relative rounded-xl">
+                <input
+                  type="number"
+                  value={eventsGstRate}
+                  onChange={e => setEventsGstRate(Number(e.target.value))}
+                  className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-zinc-800 outline-hidden font-sans font-medium"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400 font-bold text-xs">%</div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Meal Plans GST (%)</label>
+              <div className="relative rounded-xl">
+                <input
+                  type="number"
+                  value={mealPlansGstRate}
+                  onChange={e => setMealPlansGstRate(Number(e.target.value))}
+                  className="w-full bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-zinc-800 outline-hidden font-sans font-medium"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400 font-bold text-xs">%</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Events toggle */}
-      <div className="space-y-1.5 text-left">
-        <label className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-3.5 py-2 text-xs text-zinc-800 cursor-pointer select-none">
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <label className="flex items-center gap-3 bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl px-4 py-3 text-xs text-[#78716C] font-bold cursor-pointer select-none">
           <input type="checkbox" checked={showEvents} onChange={e => setShowEvents(e.target.checked)}
-            className="rounded-sm border-zinc-300 text-blue-600 w-4 h-4" />
+            className="rounded-sm accent-[#1B93A4] w-4.5 h-4.5 cursor-pointer" />
           <span>Show Events & Highlights section on site</span>
         </label>
       </div>
@@ -597,375 +841,516 @@ export const DomainView: React.FC = () => {
   );
 
   const renderDescription = () => (
-    <div className="space-y-5">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <FileText className="w-4 h-4 text-blue-600" />
-          <span>Property Introduction Descriptions</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Short description displays on homepage; detailed narrative shows in "Read More" popup.</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Property Introduction
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Short descriptions display on your homepage; detailed narrative shows in "Read More" popups.
+          </p>
+        </div>
       </div>
-      <div className="space-y-1.5 text-left">
-        <label className="text-[11px] font-bold text-zinc-700">About Section Title</label>
-        <p className="text-4xs text-zinc-400 font-medium">The main heading of your introductory/philosophy section on the homepage.</p>
-        <input type="text" value={aboutTitle} onChange={e => setAboutTitle(e.target.value)}
-          placeholder="e.g. Earth, Water, and Calm"
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" />
+
+      {/* Main card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-zinc-700">About Section Title</label>
+          <p className="text-[10px] text-zinc-400">The main heading of your introductory/philosophy section on the homepage.</p>
+          <input type="text" value={aboutTitle} onChange={e => setAboutTitle(e.target.value)}
+            placeholder="e.g. Earth, Water, and Calm"
+            className="ds-input w-full" />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-zinc-700">Short Description</label>
+          <p className="text-[10px] text-zinc-400">Shown as the first section of the property page, before the "Read more" button.</p>
+          <textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} rows={3}
+            placeholder="e.g. Escape to a world where tranquillity meets luxury..."
+            className="ds-input w-full resize-none leading-relaxed" />
+        </div>
       </div>
-      <div className="space-y-1.5 text-left">
-        <label className="text-[11px] font-bold text-zinc-700">Short Description</label>
-        <p className="text-4xs text-zinc-400 font-medium">Shown as the first section of the property page, before the "Read more" button.</p>
-        <textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} rows={3}
-          placeholder="e.g. Escape to a world where tranquillity meets luxury..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans leading-relaxed" />
-      </div>
-      <div className="space-y-1.5 text-left">
-        <label className="text-[11px] font-bold text-zinc-700">Long Description (About the Property)</label>
-        <p className="text-4xs text-zinc-400 font-medium">Provide a detailed overview of your property, history, surroundings, and what makes it unique.</p>
+
+      {/* Rich Detailed Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm">Long Description (About the Property)</h4>
+          <p className="text-xs text-zinc-400 mt-0.5">Provide a detailed overview of your property, history, surroundings, and what makes it unique.</p>
+        </div>
         <RichTextEditor value={detailedDescription} onChange={setDetailedDescription} />
       </div>
-      <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">General Fallback Text</label>
+
+      {/* Fallback Text Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-2 text-left">
+        <label className="text-xs font-bold text-zinc-700">General Fallback Text</label>
+        <p className="text-[10px] text-zinc-400">Used if the short description isn't available or for general search metadata.</p>
         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
           placeholder="General description fallback..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none font-sans leading-relaxed" />
+          className="ds-input w-full resize-none leading-relaxed" />
       </div>
     </div>
   );
 
   const renderAmenities = () => (
-    <div className="space-y-5">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <Sparkles className="w-4 h-4 text-blue-600" />
-          <span>General Amenities</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">
-          {generalAmenities.length} selected · Search or scroll to add more
-        </p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            General Amenities
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Configure the main list of highlights and facilities that guests can expect at the property.
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-1.5 text-left">
-        <label className="text-[11px] font-bold text-zinc-700">Amenities Section Title</label>
-        <p className="text-4xs text-zinc-400 font-medium">The main heading of your property amenities section on the homepage.</p>
-        <input type="text" value={amenitiesTitle} onChange={e => setAmenitiesTitle(e.target.value)}
-          placeholder="e.g. Property Amenities"
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-550 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" />
+      {/* Section Title card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-zinc-700">Amenities Section Title</label>
+          <p className="text-[10px] text-zinc-400">The main heading of your property amenities section on the homepage.</p>
+          <input type="text" value={amenitiesTitle} onChange={e => setAmenitiesTitle(e.target.value)}
+            placeholder="e.g. Property Amenities"
+            className="ds-input w-full" />
+        </div>
       </div>
 
-      {/* Selected chips */}
-      {generalAmenities.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-          {generalAmenities.map(a => (
-            <span key={a} className="flex items-center gap-1 bg-blue-100 border border-blue-300 text-blue-800 text-3xs font-bold px-2.5 py-1 rounded-full">
-              {a}
-              <button type="button" onClick={() => toggleAmenity(a)} className="hover:text-red-600 transition">
-                <X className="w-3 h-3" />
-              </button>
+      {/* Main Selector Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm flex items-center justify-between">
+            <span>Select Amenities</span>
+            <span className="text-[10px] bg-[#E6F5F7] text-[#1B93A4] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+              {generalAmenities.length} Selected
             </span>
-          ))}
+          </h4>
+          <p className="text-xs text-zinc-400">Choose from suggested property highlights or search/add your own below.</p>
         </div>
-      )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-        <input type="text" value={amenitySearch} onChange={e => setAmenitySearch(e.target.value)}
-          placeholder="Search amenities..."
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-900 outline-hidden transition" />
-      </div>
-
-      {/* Amenity grid */}
-      <div className="max-h-72 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-zinc-200">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-          {filteredAmenities.map(amenity => {
-            const isSelected = generalAmenities.includes(amenity);
-            return (
-              <button type="button" key={amenity} onClick={() => toggleAmenity(amenity)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition text-left flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-blue-50 border-blue-400 text-blue-800'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
-                }`}>
-                {isSelected && <Check className="w-3 h-3 shrink-0" />}
-                <span className="truncate">{amenity}</span>
-              </button>
-            );
-          })}
-        </div>
-        {filteredAmenities.length === 0 && (
-          <div className="text-center py-6 text-zinc-400 text-xs">No amenities match your search.</div>
+        {/* Selected chips */}
+        {generalAmenities.length > 0 && (
+          <div className="flex flex-wrap gap-2 p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+            {generalAmenities.map(a => (
+              <span key={a} className="inline-flex items-center gap-1.5 bg-[#E6F5F7] border border-[#1B93A4]/30 text-[#1B93A4] text-xs font-bold px-3 py-1 rounded-full">
+                {a}
+                <button type="button" onClick={() => toggleAmenity(a)} className="text-[#1B93A4] hover:text-rose-500 transition cursor-pointer">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
         )}
-      </div>
 
-      {/* Add custom */}
-      <div className="border-t border-zinc-150 pt-4">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest block mb-2">Add Your Own Amenity</label>
-        <div className="flex gap-2">
-          <input type="text" value={customAmenityInput} onChange={e => setCustomAmenityInput(e.target.value)}
-            placeholder="e.g. Organic Mud Bath, Cricket Ground..."
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomAmenity(); }}}
-            className="flex-1 bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
-          <button type="button" onClick={addCustomAmenity}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition">
-            Add
-          </button>
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-zinc-400" />
+          <input type="text" value={amenitySearch} onChange={e => setAmenitySearch(e.target.value)}
+            placeholder="Search amenities list..."
+            className="ds-input w-full pl-11" />
+        </div>
+
+        {/* Amenity grid */}
+        <div className="max-h-72 overflow-y-auto pr-1 border border-zinc-200 rounded-xl p-3.5 bg-zinc-50/50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {filteredAmenities.map(amenity => {
+              const isSelected = generalAmenities.includes(amenity);
+              return (
+                <button type="button" key={amenity} onClick={() => toggleAmenity(amenity)}
+                  className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border transition text-left flex items-center justify-between cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#E6F5F7] border-[#1B93A4] text-[#1B93A4] shadow-xs'
+                      : 'bg-white border-[#E7E5E4] text-zinc-700 hover:border-zinc-350 hover:bg-zinc-50'
+                  }`}>
+                  <span className="truncate">{amenity}</span>
+                  {isSelected ? (
+                    <Check className="w-4 h-4 text-[#1B93A4] shrink-0" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5 text-zinc-450 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {filteredAmenities.length === 0 && (
+            <div className="text-center py-6 text-zinc-400 text-xs font-semibold">No amenities match your search.</div>
+          )}
+        </div>
+
+        {/* Add custom */}
+        <div className="border-t border-[#E7E5E4] pt-5">
+          <label className="text-xs font-bold text-zinc-700 block mb-1">Add Your Own Amenity</label>
+          <p className="text-[10px] text-zinc-400 mb-3">If a specific amenity is not listed in the suggestions, type it here to add it to the list.</p>
+          <div className="flex gap-2">
+            <input type="text" value={customAmenityInput} onChange={e => setCustomAmenityInput(e.target.value)}
+              placeholder="e.g. Organic Mud Bath, Cricket Ground..."
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomAmenity(); }}}
+              className="flex-1 ds-input" />
+            <button type="button" onClick={addCustomAmenity}
+              className="ds-btn-primary px-5 py-2.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer">
+              Add
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 
   const renderLocationMap = () => (
-    <div className="space-y-5">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <MapPin className="w-4 h-4 text-blue-600" />
-          <span>Map Location & Address</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Address and geo-coordinates used in the map section of your website.</p>
-      </div>
-
-      <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Property Address</label>
-        <textarea value={address} onChange={e => setAddress(e.target.value)} rows={3}
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition resize-none" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Latitude</label>
-          <input type="number" step="any" value={latitude === 0 ? '' : latitude} onChange={e => setLatitude(e.target.value === '' ? 0 : Number(e.target.value))}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Map Location & Address
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Address details and geographical coordinates used to render the location map on the website.
+          </p>
         </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Longitude</label>
-          <input type="number" step="any" value={longitude === 0 ? '' : longitude} onChange={e => setLongitude(e.target.value === '' ? 0 : Number(e.target.value))}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
+      </div>
+
+      {/* Address Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-zinc-700">Property Address</label>
+          <p className="text-[10px] text-zinc-400">Ensure the address is complete and formatted correctly so customers can navigate easily.</p>
+          <textarea value={address} onChange={e => setAddress(e.target.value)} rows={3}
+            placeholder="e.g. 123 Pine Valley Road, Ooty, Tamil Nadu, India"
+            className="ds-input w-full resize-none leading-relaxed" />
+        </div>
+      </div>
+
+      {/* Coordinates Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm">Geographic Coordinates</h4>
+          <p className="text-xs text-zinc-400">Used to center the Google Map interactive widget on your homepage.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Latitude</label>
+            <input type="number" step="any" value={latitude === 0 ? '' : latitude} onChange={e => setLatitude(e.target.value === '' ? 0 : Number(e.target.value))}
+              placeholder="e.g. 11.4102"
+              className="ds-input w-full" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Longitude</label>
+            <input type="number" step="any" value={longitude === 0 ? '' : longitude} onChange={e => setLongitude(e.target.value === '' ? 0 : Number(e.target.value))}
+              placeholder="e.g. 76.6950"
+              className="ds-input w-full" />
+          </div>
         </div>
       </div>
 
       {/* Live map preview */}
       {latitude !== 0 && longitude !== 0 && (
-        <div className="rounded-xl overflow-hidden border border-zinc-200 shadow-sm">
-          <iframe
-            title="property-map-preview"
-            width="100%"
-            height="260"
-            style={{ border: 0 }}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}&q=${latitude},${longitude}&zoom=15`}
-          />
+        <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+          <div>
+            <h4 className="font-bold text-zinc-800 text-sm">Live Location Preview</h4>
+            <p className="text-xs text-zinc-400">This map shows the exact location that visitors will see on your published website.</p>
+          </div>
+          <div className="rounded-xl overflow-hidden border border-zinc-200 shadow-sm aspect-video sm:aspect-[21/9]">
+            <iframe
+              title="property-map-preview"
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              src={`https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`}
+            />
+          </div>
         </div>
       )}
     </div>
   );
 
   const renderContact = () => (
-    <div className="space-y-5">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <Phone className="w-4 h-4 text-blue-600" />
-          <span>Contact Channels</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Primary contact details and social handles displayed on your site.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Phone Number</label>
-          <input type="text" value={phone} onChange={e => setPhone(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-950 outline-hidden transition" />
-        </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Email Address</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-950 outline-hidden transition" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Contact Channels
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Primary business phone number, email address, and social links displayed across your website.
+          </p>
         </div>
       </div>
 
-      {/* Instagram */}
-      <div className="space-y-1.5 text-left">
-        <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-          <InstagramIcon className="w-3.5 h-3.5" />
-          <span>Instagram Handle</span>
-        </label>
-        <p className="text-5xs text-zinc-400">Enter your Instagram username (without @). We'll display a follow link and fetch your latest posts for the Instagram section.</p>
-        <div className="flex items-center gap-0">
-          <span className="bg-zinc-100 border border-r-0 border-zinc-200 rounded-l-lg px-3 py-2 text-xs text-zinc-500 font-bold">@</span>
-          <input type="text" value={instagramHandle} onChange={e => setInstagramHandle(e.target.value.replace('@', ''))}
-            placeholder="yourhotel"
-            className="flex-1 bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-r-lg px-3.5 py-2 text-xs text-zinc-950 outline-hidden transition" />
+      {/* Contact Channels Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Phone Number</label>
+            <p className="text-[10px] text-zinc-400">Primary customer support contact number.</p>
+            <input type="text" value={phone} onChange={e => setPhone(e.target.value)}
+              placeholder="e.g. +91 98765 43210"
+              className="ds-input w-full" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Email Address</label>
+            <p className="text-[10px] text-zinc-400">Primary customer support email inbox.</p>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="e.g. contact@yourhotel.com"
+              className="ds-input w-full" />
+          </div>
         </div>
-        {instagramHandle && (
-          <a href={`https://instagram.com/${instagramHandle}`} target="_blank" rel="noopener noreferrer"
-            className="text-3xs text-blue-600 hover:underline font-semibold">
-            → instagram.com/{instagramHandle}
-          </a>
+      </div>
+
+      {/* Instagram Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center shrink-0 border border-rose-100">
+            <InstagramIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="font-bold text-zinc-800 text-sm">Instagram Integration</h4>
+            <p className="text-xs text-zinc-400">Display your latest Instagram feed on your homepage.</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-2">
+          <label className="text-xs font-bold text-zinc-700">Instagram Handle</label>
+          <p className="text-[10px] text-zinc-400">Enter username without the @ symbol.</p>
+          <div className="flex items-center">
+            <span className="bg-[#FAFAF9] border border-r-0 border-[#E7E5E4] rounded-l-xl px-3.5 py-2.5 text-xs text-[#78716C] font-bold">@</span>
+            <input type="text" value={instagramHandle} onChange={e => setInstagramHandle(e.target.value.replace('@', ''))}
+              placeholder="yourhotel"
+              className="flex-1 ds-input rounded-l-none" />
+          </div>
+          {instagramHandle && (
+            <a href={`https://instagram.com/${instagramHandle}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-[#1B93A4] hover:underline font-bold mt-1.5 transition">
+              <span>View Profile</span>
+              <span>→ instagram.com/{instagramHandle}</span>
+            </a>
+          )}
+        </div>
+
+        {isSyncingInstagram && (
+          <div className="p-3.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-xs flex items-center gap-2.5 font-sans animate-pulse">
+            <span className="w-4 h-4 border-2 border-blue-800 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span>Scraping Instagram feed, downloading images, converting to WebP and uploading to Supabase. Please wait...</span>
+          </div>
+        )}
+        {instagramSyncError && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-sans">
+            ⚠️ {instagramSyncError}
+          </div>
         )}
       </div>
     </div>
   );
 
-  const renderOwners = () => (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
-        <div>
-          <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-            <UserCheck className="w-4 h-4 text-blue-600" />
-            <span>Co-Hosts & Permissions</span>
-          </h3>
-          <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Manage who has access to this property.</p>
-        </div>
-        <button type="button" onClick={() => { setShowAddHost(true); setEditingHostId(null); setHostForm({ name: '', phone: '', role: 'manager', canReceiveCalls: false, canAcceptBookings: false }); }}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition">
-          <Plus className="w-3.5 h-3.5" />
-          Add Co-Host
-        </button>
-      </div>
+  const renderOwners = () => {
+    const localRoleLabel: Record<CoHost['role'], string> = {
+      super_admin: 'Super Admin',
+      manager: 'Manager',
+      caretaker: 'Caretaker',
+    };
 
-      {/* Add/Edit form */}
-      {showAddHost && (
-        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-4 animate-in slide-in-from-top-2 duration-150">
-          <h4 className="text-xs font-bold text-zinc-800">{editingHostId ? 'Edit Co-Host' : 'Add New Co-Host'}</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Full Name</label>
-              <input type="text" value={hostForm.name} onChange={e => setHostForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Priya Sharma"
-                className="w-full bg-white border border-zinc-200 focus:border-blue-500 rounded-lg px-3 py-1.5 text-xs text-zinc-900 outline-hidden" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Phone</label>
-              <input type="text" value={hostForm.phone} onChange={e => setHostForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="+91 9xxxxxxxxx"
-                className="w-full bg-white border border-zinc-200 focus:border-blue-500 rounded-lg px-3 py-1.5 text-xs text-zinc-900 outline-hidden" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Role</label>
-            <select value={hostForm.role} onChange={e => setHostForm(f => ({ ...f, role: e.target.value as CoHost['role'] }))}
-              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-1.5 text-xs text-zinc-900 outline-hidden">
-              <option value="super_admin">Super Admin</option>
-              <option value="manager">Manager</option>
-              <option value="caretaker">Caretaker</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
-              <input type="checkbox" checked={hostForm.canReceiveCalls} onChange={e => setHostForm(f => ({ ...f, canReceiveCalls: e.target.checked }))}
-                className="w-4 h-4 rounded-sm accent-blue-600" />
-              Receive calls from customers
-            </label>
-            <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
-              <input type="checkbox" checked={hostForm.canAcceptBookings} onChange={e => setHostForm(f => ({ ...f, canAcceptBookings: e.target.checked }))}
-                className="w-4 h-4 rounded-sm accent-blue-600" />
-              Accept/Reject a booking
-            </label>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={handleHostSave}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition">
-              {editingHostId ? 'Update' : 'Add Co-Host'}
-            </button>
-            <button type="button" onClick={resetHostForm}
-              className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+    const localRoleColor: Record<CoHost['role'], string> = {
+      super_admin: 'bg-blue-50 border border-blue-200 text-blue-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
+      manager: 'bg-amber-50 border border-amber-200 text-amber-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
+      caretaker: 'bg-emerald-50 border border-emerald-200 text-emerald-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
+    };
 
-      {/* Co-host list */}
-      <div className="space-y-3">
-        {coHosts.map(host => (
-          <div key={host.id} className="flex items-center justify-between p-4 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 transition">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                {host.name.charAt(0).toUpperCase()}
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#E7E5E4] pb-4 text-left">
+          <div>
+            <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Co-Hosts & Permissions
+            </h2>
+            <p className="text-sm text-[#78716C]">
+              Add other team members, managers, or caretakers to help run and coordinate this property.
+            </p>
+          </div>
+          <button type="button" onClick={() => { setShowAddHost(true); setEditingHostId(null); setHostForm({ name: '', phone: '', role: 'manager', canReceiveCalls: false, canAcceptBookings: false }); }}
+            className="ds-btn-primary flex items-center gap-1.5 text-xs py-2.5 px-4 cursor-pointer">
+            <Plus className="w-4 h-4" />
+            Add Co-Host
+          </button>
+        </div>
+
+        {/* Add/Edit form */}
+        {showAddHost && (
+          <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 animate-in slide-in-from-top-3 duration-200 text-left">
+            <div className="border-b border-zinc-150 pb-2">
+              <h4 className="text-sm font-bold text-zinc-800">{editingHostId ? 'Edit Team Member Details' : 'Add New Team Member'}</h4>
+              <p className="text-[10px] text-zinc-400">Configure credentials, role hierarchy, and automated notify options.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-700">Full Name</label>
+                <input type="text" value={hostForm.name} onChange={e => setHostForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Priya Sharma"
+                  className="ds-input w-full" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-zinc-900">{host.name}</span>
-                  <span className={`text-3xs font-bold px-2 py-0.5 rounded-full ${roleColor[host.role]}`}>{roleLabel[host.role]}</span>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-700">Phone</label>
+                <input type="text" value={hostForm.phone} onChange={e => setHostForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="+91 9xxxxxxxxx"
+                  className="ds-input w-full" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-700">Role</label>
+              <select value={hostForm.role} onChange={e => setHostForm(f => ({ ...f, role: e.target.value as CoHost['role'] }))}
+                className="ds-input w-full">
+                <option value="super_admin">Super Admin (Full access to editing and billing)</option>
+                <option value="manager">Manager (Can modify rooms, policies, and calendar)</option>
+                <option value="caretaker">Caretaker (View only bookings, receive notifications)</option>
+              </select>
+            </div>
+
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 flex flex-col gap-3 font-sans">
+              <label className="flex items-center gap-3 text-xs text-zinc-700 font-bold cursor-pointer">
+                <input type="checkbox" checked={hostForm.canReceiveCalls} onChange={e => setHostForm(f => ({ ...f, canReceiveCalls: e.target.checked }))}
+                  className="w-4.5 h-4.5 rounded-sm accent-[#1B93A4] cursor-pointer" />
+                <span>Receive automatic customer calls & SMS notifications</span>
+              </label>
+              <label className="flex items-center gap-3 text-xs text-zinc-700 font-bold cursor-pointer">
+                <input type="checkbox" checked={hostForm.canAcceptBookings} onChange={e => setHostForm(f => ({ ...f, canAcceptBookings: e.target.checked }))}
+                  className="w-4.5 h-4.5 rounded-sm accent-[#1B93A4] cursor-pointer" />
+                <span>Permission to accept, modify, or reject manual reservation drafts</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button type="button" onClick={handleHostSave}
+                className="ds-btn-primary text-xs py-2.5 px-5">
+                {editingHostId ? 'Update Co-Host' : 'Create Access Token'}
+              </button>
+              <button type="button" onClick={resetHostForm}
+                className="px-5 py-2.5 border border-[#E7E5E4] bg-[#FAFAF9] hover:bg-[#F5F5F4] text-[#78716C] text-xs font-bold rounded-xl transition cursor-pointer">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Co-host list */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {coHosts.map(host => (
+            <div key={host.id} className="flex flex-col justify-between p-5 bg-white border border-[#E7E5E4] rounded-2xl hover:border-zinc-300 transition text-left shadow-xs">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#E6F5F7] text-[#1B93A4] flex items-center justify-center font-bold text-sm shrink-0 border border-[#1B93A4]/15">
+                    {host.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-[#1C1917]">{host.name}</span>
+                      <span className={localRoleColor[host.role]}>{localRoleLabel[host.role]}</span>
+                    </div>
+                    <p className="text-xs text-[#78716C] font-semibold leading-none">{host.phone}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-zinc-500">{host.phone}</p>
-                <div className="flex gap-3 mt-1">
+
+                <div className="flex flex-col gap-2 pt-2 border-t border-zinc-150 font-sans">
                   {host.role === 'super_admin' && (
-                    <span className="flex items-center gap-1 text-3xs text-blue-700 font-semibold">
-                      <Check className="w-3 h-3" /> Super Admin
+                    <span className="flex items-center gap-2 text-3xs text-[#1B93A4] font-bold">
+                      <Check className="w-3.5 h-3.5 text-[#1B93A4]" /> Super Admin access controls enabled
                     </span>
                   )}
                   {host.canReceiveCalls && (
-                    <span className="flex items-center gap-1 text-3xs text-green-700 font-semibold">
-                      <Check className="w-3 h-3" /> Receive calls from customer
+                    <span className="flex items-center gap-2 text-3xs text-[#2D6A4F] font-bold">
+                      <Check className="w-3.5 h-3.5 text-[#2D6A4F]" /> Receives automated calls & SMS
                     </span>
                   )}
                   {host.canAcceptBookings && (
-                    <span className="flex items-center gap-1 text-3xs text-green-700 font-semibold">
-                      <Check className="w-3 h-3" /> Accept/Reject a booking
+                    <span className="flex items-center gap-2 text-3xs text-[#2D6A4F] font-bold">
+                      <Check className="w-3.5 h-3.5 text-[#2D6A4F]" /> Can accept/reject manual reservations
                     </span>
                   )}
                 </div>
               </div>
+
+              <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-zinc-100">
+                <button type="button" onClick={() => startEditHost(host)}
+                  className="p-2 rounded-lg border border-[#E7E5E4] text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAFAF9] transition cursor-pointer">
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button type="button" onClick={() => deleteCoHost(host.id)}
+                  className="p-2 rounded-lg border border-[#E7E5E4] text-[#E76F51] hover:bg-[#FEF0ED] transition cursor-pointer">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button type="button" onClick={() => startEditHost(host)}
-                className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition">
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => deleteCoHost(host.id)}
-                className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+          ))}
+          {coHosts.length === 0 && (
+            <div className="col-span-full py-16 text-center bg-[#FAFAF9] border border-dashed border-[#E7E5E4] rounded-2xl">
+              <UserCheck className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+              <p className="text-zinc-500 text-xs font-semibold">No co-hosts added to this property yet.</p>
             </div>
-          </div>
-        ))}
-        {coHosts.length === 0 && (
-          <div className="text-center py-10 text-zinc-400 text-xs">No co-hosts added yet.</div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderHero = () => (
-    <div className="space-y-5">
-      <div className="border-b border-zinc-150 pb-2">
-        <h3 className="font-bold text-zinc-950 flex items-center gap-2 text-sm uppercase tracking-wide">
-          <Image className="w-4 h-4 text-blue-600" />
-          <span>Hero Banner Settings</span>
-        </h3>
-        <p className="text-4xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Layout style, tagline, photos, and video. Image slots adjust per layout.</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Hero Banner Settings
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Layout style, tagline, photos, and video loop parameters for your main landing page banner.
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Hero Style Layout</label>
-          <select value={heroStyle} onChange={e => setHeroStyle(e.target.value as any)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-2 text-xs text-zinc-900 outline-hidden transition">
-            <option value="single">Single Photo Banner (1 image)</option>
-            <option value="carousel">Edge-to-Edge Carousel (up to 5 images)</option>
-            <option value="collage">Collage of Photos (4 images)</option>
-            <option value="video">Background Video Playback</option>
-          </select>
-        </div>
-        <div className="space-y-1.5 text-left">
-          <label className="text-4xs font-bold text-zinc-500 uppercase tracking-widest">Property Tagline</label>
-          <input type="text" placeholder="e.g. Escape to Kutty Kerala in Poolampatti" value={tagline} onChange={e => setTagline(e.target.value)}
-            className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-lg px-3.5 py-2 text-xs text-zinc-900 outline-hidden transition" />
+      {/* Style & Tagline Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Hero Style Layout</label>
+            <p className="text-[10px] text-zinc-400">Select how your landing page banner displays visual media.</p>
+            <select value={heroStyle} onChange={e => setHeroStyle(e.target.value as any)}
+              className="ds-input w-full">
+              <option value="single">Single Photo Banner (1 image)</option>
+              <option value="carousel">Edge-to-Edge Carousel (up to 5 images)</option>
+              <option value="collage">Collage of Photos (4 images)</option>
+              <option value="video">Background Video Playback</option>
+            </select>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-700">Property Tagline</label>
+            <p className="text-[10px] text-zinc-400">A short, welcoming tagline displayed on top of the hero banner.</p>
+            <input type="text" placeholder="e.g. Escape to Kutty Kerala in Poolampatti" value={tagline} onChange={e => setTagline(e.target.value)}
+              className="ds-input w-full" />
+          </div>
         </div>
       </div>
 
       {/* Slot-aware image upload */}
       {heroStyle !== 'video' && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-zinc-700 uppercase tracking-wider text-left">
-            Hero Images ({slotCount} {slotCount === 1 ? 'slot' : 'slots'} for {heroStyle})
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+          <div>
+            <h4 className="font-bold text-zinc-800 text-sm">
+              Hero Images
+            </h4>
+            <p className="text-xs text-zinc-400">
+              Upload up to {slotCount} {slotCount === 1 ? 'image' : 'images'} for the selected {heroStyle} layout style.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {Array.from({ length: slotCount }).map((_, idx) => (
-              <div key={idx} className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-2">
-                <span className="text-4xs font-bold text-zinc-500 uppercase tracking-widest block">
+              <div key={idx} className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl p-4 space-y-2.5 text-left">
+                <span className="text-xs font-bold text-zinc-700">
                   {heroStyle === 'single' ? 'Hero Image' : `Image ${idx + 1}`}
                 </span>
                 <MediaUpload value={heroImages[idx] || ''} onChange={val => {
@@ -981,12 +1366,63 @@ export const DomainView: React.FC = () => {
 
       {/* Video */}
       {heroStyle === 'video' && (
-        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3 text-left">
-          <span className="text-4xs font-bold text-zinc-500 uppercase tracking-widest block">Looping Background Video</span>
+        <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+          <div>
+            <h4 className="font-bold text-zinc-800 text-sm">Looping Background Video</h4>
+            <p className="text-xs text-zinc-400">This video autoplays as the hero background. Recommended format: MP4/WebM, max 30s loop.</p>
+          </div>
           <MediaUpload accept="video/*" value={heroVideo} onChange={setHeroVideo} />
-          <p className="text-5xs text-zinc-400">This video autoplays as the hero background. Recommended: MP4, max 30s loop.</p>
         </div>
       )}
+    </div>
+  );
+
+  const renderDomain = () => (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Website Address
+          </h2>
+          <p className="text-sm text-[#78716C]">
+            Configure your hotel subdomain and link custom domain names for hosting your website.
+          </p>
+        </div>
+      </div>
+
+      {/* Subdomain Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm">Platform Subdomain</h4>
+          <p className="text-xs text-zinc-400">This is the default URL where your site will be published on the Bolt platform.</p>
+        </div>
+        <div className="flex items-center">
+          <input type="text" value={subdomain} onChange={e => setSubdomain(e.target.value)}
+            className="flex-1 ds-input rounded-r-none" />
+          <span className="bg-[#FAFAF9] border border-l-0 border-[#E7E5E4] rounded-r-xl px-4 py-2.5 text-xs text-[#78716C] font-bold flex items-center">.boltlabs.com</span>
+        </div>
+        {subdomain && (
+          <a href={`http://${subdomain}.boltlabs.com`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-[#1B93A4] hover:underline font-bold mt-1 transition">
+            <span>Visit published site:</span>
+            <span>{subdomain}.boltlabs.com</span>
+          </a>
+        )}
+      </div>
+
+      {/* Custom Domain Card */}
+      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-4 text-left">
+        <div>
+          <h4 className="font-bold text-zinc-800 text-sm">Custom Domain URL</h4>
+          <p className="text-xs text-zinc-400">If you own a custom domain (e.g. www.yourhotel.com), enter it here to link your brand domain.</p>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-zinc-700">Domain Name</label>
+          <input type="text" placeholder="www.yourhotel.com" value={customDomain} onChange={e => setCustomDomain(e.target.value)}
+            className="ds-input w-full" />
+        </div>
+      </div>
     </div>
   );
 
@@ -1000,32 +1436,32 @@ export const DomainView: React.FC = () => {
       case 'location-map': return renderLocationMap();
       case 'contact': return renderContact();
       case 'owners': return renderOwners();
+      case 'domain': return renderDomain();
       default: return renderBasicInfo();
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-2xs space-y-6">
+    <div className="space-y-6 font-sans">
       <form onSubmit={handleSubmit} className="space-y-6">
         {renderSelectedForm()}
 
-        {saveSuccess && (
-          <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-3xs font-bold uppercase tracking-wider rounded-lg text-center animate-in fade-in duration-200">
-            Changes saved successfully!
-          </div>
-        )}
-
-        {/* Owners view doesn't need a form submit */}
         {selectedView !== 'owners' && (
-          <div className="pt-5 border-t border-zinc-150 flex items-center justify-between">
-            <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <div className="bg-white border border-[#E7E5E4] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+            <span className="ds-badge ds-badge-green flex items-center gap-1.5 shrink-0">
+              <ShieldCheck className="w-4 h-4 text-[#2D6A4F]" />
               <span>Autosave Draft Enabled</span>
             </span>
-            <button type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition">
-              Save Changes
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {saveSuccess && (
+                <span className="text-xs text-[#2D6A4F] font-bold animate-in fade-in duration-200">
+                  ✓ Saved successfully
+                </span>
+              )}
+              <button type="submit" disabled={isSyncingInstagram} className="ds-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSyncingInstagram ? 'Syncing Feed...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         )}
       </form>

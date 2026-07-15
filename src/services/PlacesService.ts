@@ -38,40 +38,67 @@ export interface PlaceDetails {
  * Uses only Essentials fields → cheapest billing tier.
  */
 export async function searchPlaces(query: string): Promise<PlaceCandidate[]> {
-  const res = await fetch(`${BASE}/places:searchText`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': API_KEY,
-      // Only request Essentials fields to keep billing low
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
-    },
-    body: JSON.stringify({
-      textQuery: query,
-      languageCode: 'en',
-      maxResultCount: 5,
-    }),
-  });
+  try {
+    const res = await fetch(`${BASE}/places:searchText`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': API_KEY,
+        // Only request Essentials fields to keep billing low
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        languageCode: 'en',
+        maxResultCount: 5,
+      }),
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message ?? `Places search failed: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message ?? `Places search failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const places = (data.places ?? []) as Array<{
+      id: string;
+      displayName?: { text: string };
+      formattedAddress?: string;
+      location?: { latitude: number; longitude: number };
+    }>;
+
+    return places.map(p => ({
+      id: p.id,
+      displayName: p.displayName?.text ?? '',
+      formattedAddress: p.formattedAddress ?? '',
+      location: p.location,
+    }));
+  } catch (error: any) {
+    console.warn('Google Places API search failed, falling back to OpenStreetMap Nominatim:', error);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`;
+      const res = await fetch(url, {
+        headers: {
+          'Accept-Language': 'en',
+          'User-Agent': 'HotelBuilderApp/1.0'
+        }
+      });
+      if (!res.ok) throw new Error('Nominatim query failed');
+      const data = await res.json();
+      return data.map((item: any) => ({
+        id: `osm-${item.place_id}`,
+        displayName: item.name || item.display_name.split(',')[0],
+        formattedAddress: item.display_name,
+        location: {
+          latitude: parseFloat(item.lat),
+          longitude: parseFloat(item.lon)
+        }
+      }));
+    } catch (osmErr) {
+      console.error('Nominatim fallback also failed:', osmErr);
+      throw error; // throw original Google Places error so user sees the permission detail if both fail
+    }
   }
-
-  const data = await res.json();
-  const places = (data.places ?? []) as Array<{
-    id: string;
-    displayName?: { text: string };
-    formattedAddress?: string;
-    location?: { latitude: number; longitude: number };
-  }>;
-
-  return places.map(p => ({
-    id: p.id,
-    displayName: p.displayName?.text ?? '',
-    formattedAddress: p.formattedAddress ?? '',
-    location: p.location,
-  }));
 }
 
 /**

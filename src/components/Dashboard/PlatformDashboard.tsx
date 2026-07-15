@@ -9,6 +9,9 @@ import {
 import { searchPlaces, getPlaceDetails, type PlaceCandidate, type PlaceDetails } from '../../services/PlacesService';
 import { supabase } from '../../lib/supabaseClient';
 import { uploadMediaFile } from '../../services/StorageService';
+import { BookingsView } from './BookingsView';
+import { PaymentLinksView } from './PaymentLinksView';
+import { PricingCalendarView } from './PricingCalendarView';
 
 // ─── Onboarding modes ────────────────────────────────────────────────────────
 type OnboardingStep = 'type' | 'search' | 'confirm';
@@ -51,7 +54,7 @@ const OnboardingSplit: React.FC<{
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: '#1B93A4' }}>
             <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 11h-6V3l-7 10h6v8l7-10z" /></svg>
           </div>
-          <span className="font-extrabold text-sm tracking-tight text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Bolt Labs</span>
+          <span className="font-extrabold text-sm tracking-tight text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>MyOTA</span>
         </div>
         <button
           onClick={onBack}
@@ -81,7 +84,7 @@ const OnboardingSplit: React.FC<{
 
       {/* Footer */}
       <div className="px-8 pb-6 shrink-0 text-[10px] text-[#A8A29E] font-medium">
-        © 2024 Bolt Labs Hospitality · <span className="hover:underline cursor-pointer">Privacy</span> · <span className="hover:underline cursor-pointer">Terms</span>
+        © 2024 MyOTA Hospitality · <span className="hover:underline cursor-pointer">Privacy</span> · <span className="hover:underline cursor-pointer">Terms</span>
       </div>
     </div>
 
@@ -163,15 +166,16 @@ export const PlatformDashboard: React.FC = () => {
   // Dashboard chart
   const [chartPeriod, setChartPeriod] = useState<'lifetime' | '30days' | 'month' | 'lastmonth'>('lifetime');
 
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'bookings' | 'payment-links' | 'pricing-calendar'>('dashboard');
+
   // INR formatter
   const formatRupees = (val: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
   const activeBookings = bookings.filter(b => b.bookingStatus !== 'cancelled');
   const todayStr = new Date().toISOString().split('T')[0];
-  const upcomingCheckins = activeBookings.filter(b => b.checkIn >= todayStr).length;
-  const exchangeRate = 83;
-  const totalRevenueINR = activeBookings.reduce((sum, b) => sum + b.totalPrice, 0) * exchangeRate;
+  const upcomingGuestsCount = activeBookings.filter(b => b.checkIn >= todayStr).reduce((sum, b) => sum + (b.adults || 1) + (b.children || 0), 0);
+  const totalRevenueINR = activeBookings.reduce((sum, b) => sum + b.totalPrice, 0);
   const bookedRoomsCount = activeBookings.length;
   const avgRevenueINR = bookedRoomsCount > 0 ? totalRevenueINR / bookedRoomsCount : 0;
 
@@ -248,12 +252,12 @@ export const PlatformDashboard: React.FC = () => {
       for (let i = 0; i < totalPhotos; i++) {
         const rawUrl = photosToIngest[i];
         setCreatingStatus(`Downloading and converting photo ${i + 1} of ${totalPhotos} to WebP...`);
-        
+
         try {
           // Fetch raw image blob
           const response = await fetch(rawUrl);
           const blob = await response.blob();
-          
+
           // Draw on Canvas and compress to WebP blob
           const webpUrl = await new Promise<string>((resolve, reject) => {
             const img = new Image();
@@ -350,7 +354,7 @@ export const PlatformDashboard: React.FC = () => {
   };
 
   const statCards = [
-    { label: 'Upcoming Check-ins', value: `${upcomingCheckins} Guests`, badge: 'Future Check-ins', icon: Calendar, iconBg: '#FFF4E5', iconColor: '#D97706' },
+    { label: 'Upcoming Check-ins', value: `${upcomingGuestsCount} Guests`, badge: 'Future Check-ins', icon: Calendar, iconBg: '#FFF4E5', iconColor: '#D97706' },
     { label: 'Revenue', value: formatRupees(totalRevenueINR), badge: 'Lifetime Total', icon: DollarSign, iconBg: '#E6F4EA', iconColor: '#137333' },
     { label: 'Booked Rooms', value: String(bookedRoomsCount), badge: 'Lifetime Total', icon: CheckCircle2, iconBg: '#EBF5FF', iconColor: '#1A73E8' },
     { label: 'Guests', value: String(activeBookings.length), badge: 'Lifetime Total', icon: Clock, iconBg: '#F3E8FF', iconColor: '#9333EA' },
@@ -371,7 +375,7 @@ export const PlatformDashboard: React.FC = () => {
             <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M19 11h-6V3l-7 10h6v8l7-10z" /></svg>
           </div>
           <div>
-            <h1 className="font-extrabold text-base leading-none" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Bolt Labs</h1>
+            <h1 className="font-extrabold text-base leading-none" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>MyOTA</h1>
             <span className="ds-overline block mt-1">Hospitality Suite</span>
           </div>
         </div>
@@ -380,21 +384,32 @@ export const PlatformDashboard: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           <ul className="space-y-0.5">
             {[
-              { label: 'Dashboard', icon: LayoutDashboard, active: true },
-              { label: 'Bookings', icon: Calendar, active: false },
-              { label: 'Analytics', icon: BarChart3, active: false },
-              { label: 'Pricing & Calendar', icon: CalendarRange, active: false },
-              { label: 'Payment Links', icon: Link, active: false },
-              { label: 'Missed Bookings', icon: CalendarOff, active: false },
-            ].map(({ label, icon: Icon, active }) => (
-              <li key={label}>
-                <button className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${active ? 'font-bold' : 'hover:bg-[#FAFAF9]'}`}
-                  style={active ? { background: 'var(--ds-primary-subtle)', color: 'var(--ds-primary)' } : { color: 'var(--ds-text-secondary)' }}>
-                  <Icon className="w-4 h-4" style={{ color: active ? 'var(--ds-primary)' : 'var(--ds-text-muted)' }} />
-                  <span>{label}</span>
-                </button>
-              </li>
-            ))}
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'bookings', label: 'Bookings', icon: Calendar },
+              { id: 'analytics', label: 'Analytics', icon: BarChart3, disabled: true },
+              { id: 'pricing-calendar', label: 'Pricing & Calendar', icon: CalendarRange, disabled: false },
+              { id: 'payment-links', label: 'Payment Links', icon: Link, disabled: false },
+              { id: 'missed-bookings', label: 'Missed Bookings', icon: CalendarOff, disabled: true },
+            ].map(({ id, label, icon: Icon, disabled }) => {
+              const active = activeMainTab === id;
+              return (
+                <li key={id}>
+                  <button 
+                    disabled={disabled}
+                    onClick={() => {
+                      if (!disabled) setActiveMainTab(id as any);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      disabled ? 'opacity-50 cursor-not-allowed' : active ? 'font-bold' : 'hover:bg-[#FAFAF9] cursor-pointer'
+                    }`}
+                    style={active ? { background: 'var(--ds-primary-subtle)', color: 'var(--ds-primary)' } : { color: 'var(--ds-text-secondary)' }}
+                  >
+                    <Icon className="w-4 h-4" style={{ color: active ? 'var(--ds-primary)' : 'var(--ds-text-muted)' }} />
+                    <span>{label}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
 
           {/* Properties */}
@@ -411,7 +426,7 @@ export const PlatformDashboard: React.FC = () => {
                       <span className="text-xs font-semibold truncate max-w-[110px]" style={{ color: 'var(--ds-text-primary)' }}>{prop.name}</span>
                       <span className="ds-badge ds-badge-teal uppercase shrink-0 text-[9px] px-1.5 py-0.5">{prop.status}</span>
                     </button>
-                    
+
                     {/* Delete button (only visible on hover or mobile) */}
                     <button
                       onClick={(e) => {
@@ -449,10 +464,10 @@ export const PlatformDashboard: React.FC = () => {
               <span className="text-[10px] font-semibold block mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Manager Account</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
-            className="transition hover:text-red-500 cursor-pointer" 
-            style={{ color: 'var(--ds-text-muted)' }} 
+            className="transition hover:text-red-500 cursor-pointer"
+            style={{ color: 'var(--ds-text-muted)' }}
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />
@@ -461,7 +476,19 @@ export const PlatformDashboard: React.FC = () => {
       </aside>
 
       {/* ── Main Content ───────────────────────────────────────────── */}
-      {propertiesList.length === 0 ? (
+      {activeMainTab === 'bookings' ? (
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+          <BookingsView />
+        </main>
+      ) : activeMainTab === 'payment-links' ? (
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+          <PaymentLinksView />
+        </main>
+      ) : activeMainTab === 'pricing-calendar' ? (
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+          <PricingCalendarView />
+        </main>
+      ) : propertiesList.length === 0 ? (
         <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col justify-center items-center text-center space-y-6">
           <div className="max-w-md space-y-5">
             <div className="w-16 h-16 rounded-2xl bg-[#1B93A4]/10 text-[#1B93A4] flex items-center justify-center mx-auto shadow-xs">
@@ -648,10 +675,10 @@ export const PlatformDashboard: React.FC = () => {
                 <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-[#E7E5E4] bg-white focus-within:border-[#1B93A4] transition">
                   {/* Google G logo */}
                   <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
                   <input
                     type="text"
@@ -721,10 +748,10 @@ export const PlatformDashboard: React.FC = () => {
                 ) : (
                   <>
                     <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                     </svg>
                     Search on Google
                   </>

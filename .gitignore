@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Agent directories and documentation
+.gemini/
+.agents/
+design-skill.md
+*.md
+!README.md

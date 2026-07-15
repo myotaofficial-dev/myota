@@ -4,14 +4,17 @@ import { CustomPageRenderer } from './CustomPageRenderer';
 import { BentoGallery } from '../ui/bento-gallery';
 import { StaggerTestimonials } from '@/components/ui/stagger-testimonials';
 import InteractiveSelector from '@/components/ui/interactive-selector';
+import ImageReveal from '@/components/ui/image-tiles';
 import { FullGalleryModal } from '@/components/ui/FullGalleryModal';
 import { TravelCard } from '@/components/ui/card-7';
 import {
   Star, Phone, Mail,
   MapPin, Check, ChevronRight, X, Sparkles, MessageCircle,
-  Clock, Shield, Calendar
+  Clock, Shield, Calendar, ChevronDown, ChevronUp, ArrowRight,
+  ChevronLeft, Tag, Search, Compass, Car
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
+import { searchPlaces } from '../../services/PlacesService';
 
 const InstagramIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg
@@ -28,6 +31,35 @@ const InstagramIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
   </svg>
 );
+
+const formatDateToDDMMYYYY = (dateStr: string) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
+const getCancellationPolicyDescription = (type: string, customPolicies: any[] = []) => {
+  if (type === '2d') {
+    return 'Full refund if cancelled up to 2 days before check-in.';
+  }
+  if (type === '7d_4d') {
+    return 'Full refund if cancelled up to 7 days before check-in. 50% refund if cancelled up to 4 days before check-in.';
+  }
+  if (type === '15d_10d') {
+    return 'Full refund if cancelled up to 15 days before check-in. 50% refund if cancelled up to 10 days before check-in.';
+  }
+  if (type === 'non_refundable') {
+    return 'Non-cancellable. No refunds will be provided.';
+  }
+  const found = (customPolicies || []).find((p: any) => p.id === type);
+  if (found) {
+    return `Full refund if cancelled up to ${found.xx} days before check-in. 50% refund if cancelled up to ${found.yy} days before check-in.`;
+  }
+  return 'Standard policy: Free cancellation up to 2 days before check-in.';
+};
 
 const getRoomPriceForGuests = (room: any, guestCount: number) => {
   if (!room.price_tiers || Object.keys(room.price_tiers).length === 0) {
@@ -98,7 +130,7 @@ const distributeAdultsAndChildren = (roomsList: any[], adults: number, children:
   
   // Phase 3: Fill up to max capacity
   for (let i = 0; i < roomsList.length; i++) {
-    const maxCap = (roomsList[i].capacityAdults || 2) + (roomsList[i].capacityChildren || 1);
+    const maxCap = roomsList[i].capacityAdults || 2;
     
     // Fill with adults up to max capacity
     const currentGuests = distribution[i].adults + distribution[i].children;
@@ -147,8 +179,131 @@ export const OrganicTemplate: React.FC = () => {
     hotelInfo, rooms, pricing, addons, coupons, bookings,
     testimonials, faqs, policies, addBooking, canvasMode, setSelectedView, setEditorFocus,
     guestEvents, customPages, previewPath, setPreviewPath,
-    managedPhotos
+    managedPhotos, getAvailableInventory, gstSettings
   } = useHotel();
+
+  const policyEnabled = hotelInfo.childPolicyEnabled !== false;
+  const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
+
+  // Distance / Map Navigation calculator states
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [mapSuggestions, setMapSuggestions] = useState<any[]>([]);
+  const [mapDistanceInfo, setMapDistanceInfo] = useState<{
+    distance: number;
+    time: string;
+    origin: string;
+  } | null>(null);
+  const [isMapLocating, setIsMapLocating] = useState(false);
+  const [mapLocateError, setMapLocateError] = useState<string | null>(null);
+  const [mapRouteOrigin, setMapRouteOrigin] = useState<string | null>(null);
+  const preventSearchRef = useRef(false);
+
+  // Haversine formula helper
+  const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const formatTravelTime = (distanceKm: number) => {
+    const totalMinutes = Math.round(distanceKm * 1.35 + 5); // 1.35 mins/km average driving + 5m buffer
+    if (totalMinutes < 60) {
+      return `${totalMinutes} mins`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return mins > 0 ? `${hours} hr ${mins} mins` : `${hours} hr`;
+  };
+
+  // Debounced places autocomplete search
+  useEffect(() => {
+    if (preventSearchRef.current) {
+      preventSearchRef.current = false;
+      return;
+    }
+    if (!mapSearchQuery.trim() || mapSearchQuery === 'Your Current Location' || mapSearchQuery.length < 3) {
+      setMapSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchPlaces(mapSearchQuery);
+        setMapSuggestions(results);
+      } catch (err) {
+        console.error('Error fetching places:', err);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [mapSearchQuery]);
+
+  const handleSelectMapSuggestion = (place: any) => {
+    preventSearchRef.current = true;
+    setMapSearchQuery(place.formattedAddress);
+    setMapSuggestions([]);
+
+    if (place.location && hotelInfo.latitude && hotelInfo.longitude) {
+      const dist = getHaversineDistance(
+        place.location.latitude,
+        place.location.longitude,
+        hotelInfo.latitude,
+        hotelInfo.longitude
+      );
+      const driveDist = Math.round(dist * 1.3 * 10) / 10;
+      setMapDistanceInfo({
+        distance: driveDist,
+        time: formatTravelTime(driveDist),
+        origin: place.displayName || place.formattedAddress,
+      });
+      setMapRouteOrigin(`${place.location.latitude},${place.location.longitude}`);
+    } else {
+      setMapRouteOrigin(place.formattedAddress);
+      setMapDistanceInfo(null);
+    }
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setMapLocateError('Geolocation not supported by browser.');
+      return;
+    }
+    setIsMapLocating(true);
+    setMapLocateError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        if (hotelInfo.latitude && hotelInfo.longitude) {
+          const dist = getHaversineDistance(
+            latitude,
+            longitude,
+            hotelInfo.latitude,
+            hotelInfo.longitude
+          );
+          const driveDist = Math.round(dist * 1.3 * 10) / 10;
+          setMapDistanceInfo({
+            distance: driveDist,
+            time: formatTravelTime(driveDist),
+            origin: 'Your Current Location',
+          });
+          setMapRouteOrigin(`${latitude},${longitude}`);
+          setMapSearchQuery('Your Current Location');
+        }
+        setIsMapLocating(false);
+      },
+      (err) => {
+        console.warn('Geolocation error:', err);
+        setMapLocateError('Unable to get current location. Please type manually.');
+        setIsMapLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
 
   // Navigation state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -160,6 +315,17 @@ export const OrganicTemplate: React.FC = () => {
   const [checkOut, setCheckOut] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '');
   const [promoCode, setPromoCode] = useState('');
+
+  // Active offers slider states
+  const [activeOfferIdx, setActiveOfferIdx] = useState(0);
+  const offersList = hotelInfo.offers || [];
+  useEffect(() => {
+    if (offersList.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveOfferIdx(prev => (prev + 1) % offersList.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [offersList.length]);
 
   // Modal / Drawer state
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -179,17 +345,26 @@ export const OrganicTemplate: React.FC = () => {
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
+  const [isOtpPopupOpen, setIsOtpPopupOpen] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpMethod, setOtpMethod] = useState<'sms' | 'whatsapp'>('sms');
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [paymentSelection, setPaymentSelection] = useState<'full' | 'partial'>('full');
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>({});
   const [appliedCouponCode, setAppliedCouponCode] = useState<string>('');
   const [couponError, setCouponError] = useState<string | null>(null);
 
-  // Contact Form inside Need Help Section
-  const [contactMessage, setContactMessage] = useState('');
-  const [contactSuccess, setContactSuccess] = useState(false);
+  const [showGstBreakdown, setShowGstBreakdown] = useState(false);
 
   // FAQ states
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+
+  // Policy states
+  const [openPolicyId, setOpenPolicyId] = useState<string | null>(null);
+  const [isPoliciesPopupOpen, setIsPoliciesPopupOpen] = useState(false);
 
   // Active Hero Slide Index (For Carousel Hero Style)
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
@@ -208,6 +383,8 @@ export const OrganicTemplate: React.FC = () => {
   // Full gallery modal
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [selectedAddonDetail, setSelectedAddonDetail] = useState<any | null>(null);
+  const [showAllAddons, setShowAllAddons] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   // Dynamic Multi-Room Booking & Occupancy States
   const [selectedRoomsList, setSelectedRoomsList] = useState<any[]>([]);
@@ -317,7 +494,7 @@ export const OrganicTemplate: React.FC = () => {
 
   const [comboValidationError, setComboValidationError] = useState<string | null>(null);
 
-  const calculateAllRoomsStayPrice = (roomList: any[], effAdults: number, effChildren: number) => {
+  const calculateAllRoomsStayPrice = (roomList: any[], effAdults: number, effChildren: number, skipOffers?: boolean) => {
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     const nights = differenceInDays(end, start);
@@ -341,32 +518,147 @@ export const OrganicTemplate: React.FC = () => {
       const baseRate = getRoomPriceForGuests(room, baseGuests);
       const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
       const extraChildRate = hotelInfo.extraChildRate ?? 0;
+      
+      const isCpBase = hotelInfo.defaultMealPlan === 'CP';
+      const cpAdultRate = isCpBase ? (hotelInfo.mealPlanCpAdultRate ?? 300) : 0;
+      const cpChildRate = isCpBase ? (hotelInfo.mealPlanCpChildRate ?? 250) : 0;
+      
+      const cpCostPerNight = (dist.adults * cpAdultRate) + (dist.children * cpChildRate);
       const extraCostPerNight = (extraAdults * extraAdultRate) + (extraChildren * extraChildRate);
       
       for (let i = 0; i < nights; i++) {
         const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
         const override = roomPricing[dateStr];
         const dayBasePrice = override && override.price > 0 ? override.price : baseRate;
-        total += dayBasePrice + extraCostPerNight;
+        
+        let dayCost = dayBasePrice + extraCostPerNight + cpCostPerNight;
+        
+        // Apply active campaigns for 'rooms' on this date targeting this specific room category
+        if (!skipOffers) {
+          const activeOffers = (hotelInfo.offers || []).filter(
+            (o: any) => o.dates.includes(dateStr) && (o.roomIds || []).includes(room.id)
+          );
+          activeOffers.forEach((offer: any) => {
+            if (offer.discountType === 'percent') {
+              dayCost = dayCost * (1 - offer.discountValue / 100);
+            } else {
+              dayCost = Math.max(0, dayCost - offer.discountValue);
+            }
+          });
+        }
+        
+        total += Math.round(dayCost);
       }
     });
     return total;
   };
 
+  const calculateRoomsGST = (roomList: any[], effAdults: number, effChildren: number) => {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const nights = differenceInDays(end, start);
+    if (isNaN(nights) || nights <= 0) return 0;
+
+    const distribution = distributeAdultsAndChildren(roomList, effAdults, effChildren);
+    
+    let totalGST = 0;
+    roomList.forEach((room, idx) => {
+      const roomPricing = pricing[room.id] || {};
+      const dist = distribution[idx] || { adults: 1, children: 0 };
+      
+      const baseOcc = room.base_occupancy || room.capacityAdults || 2;
+      const baseAdults = Math.min(dist.adults, baseOcc);
+      const baseChildren = Math.min(dist.children, baseOcc - baseAdults);
+      const baseGuests = baseAdults + baseChildren;
+      
+      const extraAdults = dist.adults - baseAdults;
+      const extraChildren = dist.children - baseChildren;
+      
+      const baseRate = getRoomPriceForGuests(room, baseGuests);
+      const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
+      const extraChildRate = hotelInfo.extraChildRate ?? 0;
+      
+      const isCpBase = hotelInfo.defaultMealPlan === 'CP';
+      const cpAdultRate = isCpBase ? (hotelInfo.mealPlanCpAdultRate ?? 300) : 0;
+      const cpChildRate = isCpBase ? (hotelInfo.mealPlanCpChildRate ?? 250) : 0;
+      
+      const cpCostPerNight = (dist.adults * cpAdultRate) + (dist.children * cpChildRate);
+      const extraCostPerNight = (extraAdults * extraAdultRate) + (extraChildren * extraChildRate);
+      
+      for (let i = 0; i < nights; i++) {
+        const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
+        const override = roomPricing[dateStr];
+        const dayBasePrice = override && override.price > 0 ? override.price : baseRate;
+        
+        let dayCost = dayBasePrice + extraCostPerNight + cpCostPerNight;
+        
+        // Apply active campaigns for 'rooms' on this date targeting this specific room category
+        const activeOffers = (hotelInfo.offers || []).filter(
+          (o: any) => o.dates.includes(dateStr) && (o.roomIds || []).includes(room.id)
+        );
+        activeOffers.forEach((offer: any) => {
+          if (offer.discountType === 'percent') {
+            dayCost = dayCost * (1 - offer.discountValue / 100);
+          } else {
+            dayCost = Math.max(0, dayCost - offer.discountValue);
+          }
+        });
+        
+        const finalDayCost = Math.round(dayCost);
+        let rate = 0;
+        if (gstSettings && gstSettings.room_slabs && gstSettings.room_slabs.length > 0) {
+          const slab = gstSettings.room_slabs.find(
+            (s: any) => finalDayCost >= s.min && finalDayCost <= s.max
+          );
+          if (slab) {
+            rate = slab.rate / 100;
+          }
+        } else {
+          if (finalDayCost > 7500) rate = 0.18;
+          else if (finalDayCost > 1000) rate = 0.05;
+        }
+        
+        totalGST += Math.round(finalDayCost * rate);
+      }
+    });
+    return totalGST;
+  };
+
   const checkTooManyRooms = (selectedRooms: any[], adults: number, children: number) => {
+    // Validate minimum occupancy of the selected rooms
+    const combinedMinOccupancy = selectedRooms.reduce((sum, r) => sum + (r.min_occupancy || 1), 0);
+    if (adults + children < combinedMinOccupancy) {
+      const messages = selectedRooms
+        .filter(r => (r.min_occupancy || 1) > 1)
+        .map(r => `${r.name} requires a minimum of ${r.min_occupancy} guests`);
+      
+      return {
+        enoughRoomsCount: selectedRooms.length,
+        message: messages.length > 0 
+          ? messages.join(', ')
+          : `Selected rooms require at least ${combinedMinOccupancy} guests total.`
+      };
+    }
+
     if (selectedRooms.length <= 1) return null;
     
-    for (let i = 0; i < selectedRooms.length; i++) {
-      const remainingRooms = [...selectedRooms];
-      remainingRooms.splice(i, 1);
+    // Sort selected rooms by capacityAdults descending
+    const sortedRooms = [...selectedRooms].sort((a, b) => {
+      const capA = a.capacityAdults || 2;
+      const capB = b.capacityAdults || 2;
+      return capB - capA;
+    });
+
+    // Check if we can accommodate the group with fewer rooms
+    for (let k = 1; k < selectedRooms.length; k++) {
+      // Take the k largest rooms
+      const subRooms = sortedRooms.slice(0, k);
+      const combinedAdultsCap = subRooms.reduce((sum, r) => sum + (r.capacityAdults || 2), 0);
       
-      const remainingAdultsCap = remainingRooms.reduce((sum, r) => sum + (r.capacityAdults || 2), 0);
-      const remainingChildrenCap = remainingRooms.reduce((sum, r) => sum + (r.capacityChildren || 0), 0);
-      
-      if (remainingAdultsCap >= adults && (remainingAdultsCap + remainingChildrenCap) >= (adults + children)) {
+      if (combinedAdultsCap >= (adults + children)) {
         return {
-          enoughRoomsCount: remainingRooms.length,
-          message: `You have selected too many rooms. Minimum ${remainingRooms.length} room${remainingRooms.length > 1 ? 's are' : ' is'} enough for your group.`
+          enoughRoomsCount: k,
+          message: `You have selected too many rooms. Minimum ${k} room${k > 1 ? 's are' : ' is'} enough for your group.`
         };
       }
     }
@@ -467,18 +759,43 @@ export const OrganicTemplate: React.FC = () => {
     });
   };
 
+  const getMinAvailableInventoryDuringStay = (roomId: string): number => {
+    try {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+        return getAvailableInventory(roomId, checkIn);
+      }
+      
+      let minAvail = 999;
+      let current = new Date(start);
+      while (current < end) {
+        const dateStr = current.toISOString().split('T')[0];
+        const availOnDate = getAvailableInventory(roomId, dateStr);
+        if (availOnDate < minAvail) {
+          minAvail = availOnDate;
+        }
+        current.setDate(current.getDate() + 1);
+      }
+      return minAvail === 999 ? 0 : minAvail;
+    } catch {
+      return 0;
+    }
+  };
+
   const getSmartRecommendations = () => {
     const totalRequired = adultsCount + childrenCount;
     const recommendations: Array<{
       type: 'single' | 'combo';
       rooms: any[];
       price: number;
+      originalPrice: number;
       label: string;
       description: string;
     }> = [];
 
     // Helper to calculate total price for a room list for the selected dates
-    const getRoomListPrice = (roomList: any[]) => {
+    const getRoomListPrice = (roomList: any[], skipOffers?: boolean) => {
       const policyEnabled = hotelInfo.childPolicyEnabled !== false;
       const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
       const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
@@ -489,24 +806,29 @@ export const OrganicTemplate: React.FC = () => {
       const effAdults = adultsCount + adultChildren;
       const effChildren = payingChildren;
 
-      return calculateAllRoomsStayPrice(roomList, effAdults, effChildren);
+      return calculateAllRoomsStayPrice(roomList, effAdults, effChildren, skipOffers);
     };
 
     // 1. Single Room Recommendations
     rooms.forEach(room => {
-      const maxCap = (room.capacityAdults || 2) + (room.capacityChildren || 1);
+      const maxCap = room.capacityAdults || 2;
+      const minCap = room.min_occupancy || 1;
       const policyEnabled = hotelInfo.childPolicyEnabled !== false;
       const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
       const adultChildren = childrenAges.filter(age => age > maxAge).length;
       const effAdults = adultsCount + adultChildren;
 
-      if (maxCap >= totalRequired && (room.capacityAdults || 2) >= effAdults) {
+      const availInventory = getMinAvailableInventoryDuringStay(room.id);
+      if (maxCap >= totalRequired && totalRequired >= minCap && (room.capacityAdults || 2) >= effAdults && availInventory > 0) {
         const distribution = distributeAdultsAndChildren([room], effAdults, totalRequired - effAdults);
         const desc = getRecommendationDescription([room], distribution);
+        const price = getRoomListPrice([room]);
+        const originalPrice = getRoomListPrice([room], true);
         recommendations.push({
           type: 'single',
           rooms: [room],
-          price: getRoomListPrice([room]),
+          price,
+          originalPrice,
           label: room.name,
           description: desc
         });
@@ -519,13 +841,18 @@ export const OrganicTemplate: React.FC = () => {
         const r1 = rooms[i];
         const r2 = rooms[j];
 
-        // Same room type requires inventory >= 2
-        if (r1.id === r2.id && (r1.totalInventory || 0) < 2) {
-          continue;
+        const avail1 = getMinAvailableInventoryDuringStay(r1.id);
+        const avail2 = getMinAvailableInventoryDuringStay(r2.id);
+
+        // Check if there is enough inventory for both rooms
+        if (r1.id === r2.id) {
+          if (avail1 < 2) continue;
+        } else {
+          if (avail1 < 1 || avail2 < 1) continue;
         }
 
-        const maxCap1 = (r1.capacityAdults || 2) + (r1.capacityChildren || 1);
-        const maxCap2 = (r2.capacityAdults || 2) + (r2.capacityChildren || 1);
+        const maxCap1 = r1.capacityAdults || 2;
+        const maxCap2 = r2.capacityAdults || 2;
         const combinedCapacity = maxCap1 + maxCap2;
         const combinedAdultsCapacity = (r1.capacityAdults || 2) + (r2.capacityAdults || 2);
         
@@ -534,13 +861,18 @@ export const OrganicTemplate: React.FC = () => {
         const adultChildren = childrenAges.filter(age => age > maxAge).length;
         const effAdults = adultsCount + adultChildren;
 
-        if (combinedCapacity >= totalRequired && combinedAdultsCapacity >= effAdults) {
+        const combinedMinCap = (r1.min_occupancy || 1) + (r2.min_occupancy || 1);
+
+        if (combinedCapacity >= totalRequired && totalRequired >= combinedMinCap && combinedAdultsCapacity >= effAdults) {
           const distribution = distributeAdultsAndChildren([r1, r2], effAdults, totalRequired - effAdults);
           const desc = getRecommendationDescription([r1, r2], distribution);
+          const price = getRoomListPrice([r1, r2]);
+          const originalPrice = getRoomListPrice([r1, r2], true);
           recommendations.push({
             type: 'combo',
             rooms: [r1, r2],
-            price: getRoomListPrice([r1, r2]),
+            price,
+            originalPrice,
             label: r1.id === r2.id ? `2x ${r1.name}` : `${r1.name} + ${r2.name}`,
             description: desc
           });
@@ -566,13 +898,13 @@ export const OrganicTemplate: React.FC = () => {
 
   // Price calculations
   const calculateTotal = () => {
-    if (currentSelectedRooms.length === 0) return { subtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, grandTotal: 0, nights: 0 };
+    if (currentSelectedRooms.length === 0) return { subtotal: 0, originalSubtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, gstTotal: 0, gstBreakdown: { roomsGst: 0, eventsGst: 0, addonsGst: 0, mealPlanGst: 0 }, grandTotal: 0, nights: 0 };
 
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     const nights = differenceInDays(end, start);
 
-    if (isNaN(nights) || nights <= 0) return { subtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, grandTotal: 0, nights: 0 };
+    if (isNaN(nights) || nights <= 0) return { subtotal: 0, originalSubtotal: 0, discount: 0, addonTotal: 0, mealPlanTotal: 0, gstTotal: 0, gstBreakdown: { roomsGst: 0, eventsGst: 0, addonsGst: 0, mealPlanGst: 0 }, grandTotal: 0, nights: 0 };
 
     // 1. Child age categories based on hotelInfo policies
     const policyEnabled = hotelInfo.childPolicyEnabled !== false;
@@ -587,6 +919,7 @@ export const OrganicTemplate: React.FC = () => {
 
     // 2. Room subtotal (with pricing tiers + calendar overrides + extra beds)
     const subtotal = calculateAllRoomsStayPrice(currentSelectedRooms, effectiveAdults, effectiveChildren);
+    const originalSubtotal = calculateAllRoomsStayPrice(currentSelectedRooms, effectiveAdults, effectiveChildren, true);
 
     let addonTotal = 0;
     selectedAddons.forEach(addonName => {
@@ -611,24 +944,39 @@ export const OrganicTemplate: React.FC = () => {
 
     // 5. Meal Plan calculation
     let mealPlanTotal = 0;
-    if (selectedMealPlan !== 'ep') {
-      const isCp = selectedMealPlan === 'cp';
-      const isMap = selectedMealPlan === 'map';
+    const isCpBase = hotelInfo.defaultMealPlan === 'CP';
+    const cpAdultRate = hotelInfo.mealPlanCpAdultRate ?? 300;
+    const cpChildRate = hotelInfo.mealPlanCpChildRate ?? 250;
 
-      const adultRate = isCp 
-        ? (hotelInfo.mealPlanCpAdultRate ?? 300) 
-        : isMap 
-        ? (hotelInfo.mealPlanMapAdultRate ?? 1000) 
-        : (hotelInfo.mealPlanApAdultRate ?? 1500);
+    if (isCpBase) {
+      if (selectedMealPlan === 'map') {
+        const upgradeAdultRate = Math.max(0, (hotelInfo.mealPlanMapAdultRate ?? 1000) - cpAdultRate);
+        const upgradeChildRate = Math.max(0, (hotelInfo.mealPlanMapChildRate ?? 750) - cpChildRate);
+        mealPlanTotal = ((effectiveAdults * upgradeAdultRate) + (effectiveChildren * upgradeChildRate)) * nights;
+      } else if (selectedMealPlan === 'ap') {
+        const upgradeAdultRate = Math.max(0, (hotelInfo.mealPlanApAdultRate ?? 1500) - cpAdultRate);
+        const upgradeChildRate = Math.max(0, (hotelInfo.mealPlanApChildRate ?? 1250) - cpChildRate);
+        mealPlanTotal = ((effectiveAdults * upgradeAdultRate) + (effectiveChildren * upgradeChildRate)) * nights;
+      }
+    } else {
+      if (selectedMealPlan !== 'ep') {
+        const isCp = selectedMealPlan === 'cp';
+        const isMap = selectedMealPlan === 'map';
 
-      const childRate = isCp 
-        ? (hotelInfo.mealPlanCpChildRate ?? 250) 
-        : isMap 
-        ? (hotelInfo.mealPlanMapChildRate ?? 750) 
-        : (hotelInfo.mealPlanApChildRate ?? 1250);
+        const adultRate = isCp 
+          ? (hotelInfo.mealPlanCpAdultRate ?? 300) 
+          : isMap 
+          ? (hotelInfo.mealPlanMapAdultRate ?? 1000) 
+          : (hotelInfo.mealPlanApAdultRate ?? 1500);
 
-      // Meal rates are calculated per guest (adult or paying child) per night
-      mealPlanTotal = ((effectiveAdults * adultRate) + (effectiveChildren * childRate)) * nights;
+        const childRate = isCp 
+          ? (hotelInfo.mealPlanCpChildRate ?? 250) 
+          : isMap 
+          ? (hotelInfo.mealPlanMapChildRate ?? 750) 
+          : (hotelInfo.mealPlanApChildRate ?? 1250);
+
+        mealPlanTotal = ((effectiveAdults * adultRate) + (effectiveChildren * childRate)) * nights;
+      }
     }
 
     let discount = 0;
@@ -643,8 +991,53 @@ export const OrganicTemplate: React.FC = () => {
       }
     }
 
-    const grandTotal = Math.max(0, subtotal - discount + addonTotal + mealPlanTotal);
-    return { subtotal, discount, addonTotal, mealPlanTotal, grandTotal, nights };
+    // 6. GST Calculation
+    const roomsGst = calculateRoomsGST(currentSelectedRooms, effectiveAdults, effectiveChildren);
+    
+    let eventsGst = 0;
+    let addonsGst = 0;
+    const eventTaxRate = (gstSettings?.events_rate ?? 18) / 100;
+    const addonTaxRate = (gstSettings?.addons_rate ?? 18) / 100;
+    const mealTaxRate = (gstSettings?.meal_plans_rate ?? 18) / 100;
+
+    selectedAddons.forEach(addonName => {
+      if (addonName.startsWith('Event: ')) {
+        const cleanTitle = addonName.replace('Event: ', '').split(' (')[0];
+        const evt = guestEvents.find(e => e.title === cleanTitle);
+        if (evt) {
+          const eventPrice = calculateEventBookingPrice(evt, adultsCount, childrenAges);
+          eventsGst += Math.round(eventPrice * eventTaxRate);
+        }
+      } else {
+        const addon = addons.find(a => a.name === addonName);
+        if (addon) {
+          let addonPrice = 0;
+          if (addon.pricingType === 'per_head') {
+            const totalGuests = Math.max(1, adultsCount + childrenCount);
+            addonPrice = addon.price * totalGuests;
+          } else {
+            addonPrice = addon.price;
+          }
+          addonsGst += Math.round(addonPrice * addonTaxRate);
+        }
+      }
+    });
+
+    const mealPlanGst = Math.round(mealPlanTotal * mealTaxRate);
+    const gstTotal = roomsGst + eventsGst + addonsGst + mealPlanGst;
+
+    const grandTotal = Math.max(0, subtotal - discount + addonTotal + mealPlanTotal + gstTotal);
+    return { 
+      subtotal, 
+      originalSubtotal, 
+      discount, 
+      addonTotal, 
+      mealPlanTotal, 
+      gstTotal,
+      gstBreakdown: { roomsGst, eventsGst, addonsGst, mealPlanGst },
+      grandTotal, 
+      nights 
+    };
   };
 
   const totals = calculateTotal();
@@ -662,11 +1055,17 @@ export const OrganicTemplate: React.FC = () => {
     }
   };
 
-  const handleCreateBooking = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateBooking = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!guestName || !guestEmail || currentSelectedRooms.length === 0) return;
  
-    addBooking({
+    const isPartial = paymentSelection === 'partial';
+    const finalPaymentStatus = isPartial ? 'partially_paid' : 'paid';
+    const finalPaidAmount = isPartial 
+      ? Math.round(totals.grandTotal * (hotelInfo.paymentCollectionPercent || 50) / 100)
+      : totals.grandTotal;
+
+    const bookingId = await addBooking({
       roomId: currentSelectedRooms.map(r => r.id).join(','),
       roomName: currentSelectedRooms.map(r => r.name).join(' + '),
       guestName,
@@ -675,20 +1074,20 @@ export const OrganicTemplate: React.FC = () => {
       checkIn,
       checkOut,
       totalPrice: totals.grandTotal,
-      paymentStatus: 'paid',
+      paymentStatus: finalPaymentStatus as any,
       bookingStatus: 'confirmed',
       addons: selectedAddons,
       couponCode: appliedCouponCode || undefined,
       adults: adultsCount,
-      children: childrenCount
+      children: childrenCount,
+      paidAmount: finalPaidAmount
     });
  
-    const ref = `OG-${Math.floor(1000 + Math.random() * 9000)}`;
-    setConfirmedBookingRef(ref);
+    setConfirmedBookingRef(bookingId);
     setBookingStep('success');
   };
  
-  const handleCreateEventBooking = (e: React.FormEvent) => {
+  const handleCreateEventBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName || !guestEmail || !selectedEvent) return;
  
@@ -709,7 +1108,7 @@ export const OrganicTemplate: React.FC = () => {
 
     const priceTotal = calculateEventBookingPrice(selectedEvent, eventAdultsCount, eventChildrenAges);
 
-    addBooking({
+    const eventBookingId = await addBooking({
       roomId: `event-booking-${selectedEvent.id}`,
       roomName: `Day Event: ${selectedEvent.title}`,
       guestName,
@@ -726,19 +1125,10 @@ export const OrganicTemplate: React.FC = () => {
       selectedSlot: eventSelectedSlotId || undefined
     });
  
-    setConfirmedBookingRef(`EV-${Math.floor(1000 + Math.random() * 9000)}`);
+    setConfirmedBookingRef(eventBookingId);
     setEventBookingStep('success');
   };
 
-
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setContactSuccess(true);
-    setTimeout(() => {
-      setContactSuccess(false);
-      setContactMessage('');
-    }, 3000);
-  };
 
 
   const triggerEdit = (view: string, e: React.MouseEvent) => {
@@ -786,11 +1176,11 @@ export const OrganicTemplate: React.FC = () => {
   };
 
   const instagramMock = [
-    "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=200",
-    "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=200",
-    "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=200",
-    "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=200",
-    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=200"
+    "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=600",
+    "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=600",
+    "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=600",
+    "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=600",
+    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=600"
   ];
 
   // Dynamic order states
@@ -920,7 +1310,7 @@ export const OrganicTemplate: React.FC = () => {
           </span>
           <h2
             className="text-[clamp(2.5rem,6.5vw,5.5rem)] font-light text-white tracking-[-0.02em] leading-[0.95] uppercase font-serif"
-            style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
+            style={{ fontFamily: "'Playfair Display', serif" }}
           >
             {hotelInfo.name}
           </h2>
@@ -964,26 +1354,99 @@ export const OrganicTemplate: React.FC = () => {
     tagline: (
       <section
         key="tagline"
-        onClick={(e) => triggerEdit('property', e)}
-        className={`bg-[#E8E2D6] py-3 px-6 relative flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
+        className={`bg-[#1C1917] text-white py-3 px-6 relative overflow-hidden flex flex-col items-center justify-center group transition select-none ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''
           }`}
       >
         {canvasMode === 'editor' && (
-          <span className="absolute top-1/2 -translate-y-1/2 right-4 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-40 border border-blue-400">
-            ✏️ Edit Tagline
+          <span className="absolute top-3 right-4 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
+            ✏️ Manage Offers
           </span>
         )}
-        <div className="flex items-center gap-2 text-left">
-          <span className="text-xs font-bold text-[#3D405B]">
-            {hotelInfo.name} : <span className="text-[#E07A5F] italic font-serif text-sm animate-none" style={{ fontFamily: "'Fraunces', serif" }}>{hotelInfo.tagline}</span>
-          </span>
+
+        <div className="w-full max-w-2xl mx-auto flex items-center justify-between min-h-[38px]">
+          {/* Left Arrow */}
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (offersList.length > 0) {
+                setActiveOfferIdx(prev => (prev - 1 + offersList.length) % offersList.length);
+              }
+            }}
+            className="p-1 hover:bg-white/10 rounded-full transition text-zinc-400 hover:text-white cursor-pointer shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Card Content with Slide/Fade Transition */}
+          <div 
+            onClick={(e) => triggerEdit('offers-promotions', e)}
+            className="flex-1 px-4 text-center cursor-pointer transition-all duration-300 transform"
+          >
+            {offersList.length > 0 ? (
+              (() => {
+                const currentOffer = offersList[activeOfferIdx % offersList.length];
+                if (!currentOffer) return null;
+                const discVal = currentOffer.discountType === 'percent' ? `${currentOffer.discountValue}%` : `₹${currentOffer.discountValue}`;
+                const targetNames = currentOffer.roomIds.map((rid: string) => rooms.find((r: any) => r.id === rid)?.name).filter(Boolean).join(', ');
+                return (
+                  <div className="animate-in fade-in slide-in-from-right-3 duration-300 flex flex-col items-center gap-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 justify-center">
+                      <Tag className="w-3 h-3 animate-pulse" />
+                      <span>{currentOffer.name}</span>
+                    </span>
+                    <span className="text-3xs font-extrabold tracking-widest text-zinc-100 uppercase mt-0.5">
+                      Get {discVal} Off on <span className="text-amber-400 font-black">{targetNames || 'selected'}</span> category bookings!
+                    </span>
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 justify-center">
+                  <Tag className="w-3 h-3" />
+                  <span>Welcome Offer</span>
+                </span>
+                <span className="text-3xs font-extrabold tracking-widest text-zinc-100 uppercase mt-0.5">
+                  It's Sale Time: Up to 40% Off on select premium category stays!
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Right Arrow */}
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (offersList.length > 0) {
+                setActiveOfferIdx(prev => (prev + 1) % offersList.length);
+              }
+            }}
+            className="p-1 hover:bg-white/10 rounded-full transition text-zinc-400 hover:text-white cursor-pointer shrink-0"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-[#556B2F] font-semibold">
-          <MapPin className="w-3.5 h-3.5 text-[#E07A5F]" />
-          <span>No.1 Poolampatti, Odakattur</span>
-          <span className="w-1 h-1 rounded-full bg-[#556B2F]"></span>
-          <span className="text-[#E07A5F] font-bold">⭐ {hotelInfo.starRating}.0 Rating</span>
-        </div>
+
+        {/* Carousel Dots Indicators */}
+        {offersList.length > 1 && (
+          <div className="flex justify-center gap-1 mt-1">
+            {offersList.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveOfferIdx(idx);
+                }}
+                className={`w-1 h-1 rounded-full transition-all duration-300 ${
+                  idx === (activeOfferIdx % offersList.length) ? 'w-2.5 bg-amber-400' : 'bg-white/30'
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </section>
     ),
     about: (
@@ -999,7 +1462,7 @@ export const OrganicTemplate: React.FC = () => {
             ✏️ Edit About
           </span>
         )}
-        <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+        <h3 className="text-[clamp(1.6rem,3.5vw,2.8rem)] font-medium text-[#3D405B] leading-[1.05] tracking-[-0.01em]" style={{ fontFamily: "'Playfair Display', serif" }}>
           {hotelInfo.aboutTitle || "Earth, Water, and Calm"}
         </h3>
         <p className="text-[0.875rem] leading-[1.75] text-zinc-500 font-light max-w-lg mx-auto">
@@ -1032,7 +1495,7 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-1">
             {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Natural Luxuries)</span> */}
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
               {hotelInfo.amenitiesTitle || "Property Amenities"}
             </h3>
           </div>
@@ -1080,7 +1543,7 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-1.5">
             {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Gatherings & Day Outs)</span> */}
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
               {hotelInfo.eventsTitle || "Resort Packages & Scheduled Activities"}
             </h3>
             <p className="text-[11px] text-zinc-400 lowercase tracking-wider font-light">Book individually — no room reservation needed</p>
@@ -1156,6 +1619,9 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           <InteractiveSelector
             rooms={rooms}
+            pricing={pricing}
+            checkIn={checkIn}
+            hotelInfo={hotelInfo}
             title={hotelInfo.roomsTitle || 'Our Sanctuary Spaces'}
             subtitle="Choose from our carefully curated retreat spaces, each designed for pure immersion in nature."
             onBookRoom={(roomId) => {
@@ -1188,7 +1654,7 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-5xl mx-auto space-y-6">
           <div className="text-center space-y-1.5">
             {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Guest Feedback)</span> */}
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
               {hotelInfo.reviewsTitle || "Guest Reviews"}
             </h3>
             <span className="text-[10px] text-[#8FA89B] font-medium block tracking-[0.1em]">Verified reviews · {testimonials.length > 0 ? (testimonials.reduce((s, t) => s + t.rating, 0) / testimonials.length).toFixed(1) : '5.0'} / 5.0</span>
@@ -1205,7 +1671,7 @@ export const OrganicTemplate: React.FC = () => {
       <section key="bento-gallery" className="bg-[#FAF6F0] py-4 border-t border-[#D8E2DC] relative">
         <div className="max-w-7xl mx-auto text-center space-y-1.5 mb-6">
           {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Portrait Diary)</span> */}
-          <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+          <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
             {hotelInfo.galleryTitle || "Natural Vignettes"}
           </h3>
         </div>
@@ -1228,59 +1694,146 @@ export const OrganicTemplate: React.FC = () => {
             ✏️ Edit Policies & Rules
           </span>
         )}
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 font-sans">
-          {/* Rules */}
-          <div className="space-y-4 text-left font-sans">
-            <h3 className="text-lg font-serif text-[#3D405B] border-b border-[#8FA89B]/20 pb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="text-center space-y-1.5">
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
               {hotelInfo.policiesTitle || "Resort Guidelines"}
             </h3>
-            <ul className="space-y-3 text-zinc-600 text-2xs font-semibold uppercase tracking-wider font-sans">
-              <li className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#8FA89B]" />
-                <span>Arrival: {hotelInfo.checkInTime || '14:00'} • Departure: {hotelInfo.checkOutTime || '11:00'}</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-[#8FA89B]" />
-                <span>Eco friendliness: Limit plastic consumption in suite zones.</span>
-              </li>
-              {policies.map(p => (
-                <li key={p.id} className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{p.title}: {p.description}</span>
-                </li>
-              ))}
-            </ul>
           </div>
 
-          {/* Need help */}
-          <div className="bg-[#FAF6F0] border border-[#D8E2DC] p-5 rounded-2xl space-y-3 text-left">
-            <h4 className="font-bold text-[#3D405B] text-xs uppercase tracking-wide flex items-center gap-1.5">
-              <MessageCircle className="w-4 h-4 text-[#8FA89B]" />
-              <span>Contact Concierge Desk</span>
-            </h4>
-            <p className="text-5xs text-zinc-500 leading-relaxed font-sans font-medium">
-              Need assistance or special room upgrades? Submit your contact inquiry and we will get back shortly.
-            </p>
+          <div className="space-y-1.5 font-sans font-semibold">
+            {(() => {
+              const allPolicyItems = [
+                {
+                  id: 'arrival-departure',
+                  title: 'Check-In & Check-Out Hours',
+                  isHours: true,
+                  description: ''
+                },
+                ...policies.map((p) => ({
+                  id: p.id,
+                  title: p.title,
+                  isHours: false,
+                  description: p.description
+                }))
+              ];
 
-            <form onSubmit={handleContactSubmit} className="space-y-2">
-              <textarea
-                required
-                value={contactMessage}
-                onChange={(e) => setContactMessage(e.target.value)}
-                placeholder="Message concierge desk..."
-                rows={2}
-                className="w-full bg-[#FAF6F0] border border-[#D8E2DC] focus:border-[#8FA89B] text-3xs p-2 rounded-xl outline-hidden"
-              />
-              <button
-                type="submit"
-                className="bg-[#8FA89B] hover:bg-[#7D9387] text-white font-extrabold text-[9px] uppercase tracking-wider px-3.5 py-1.8 w-full rounded-lg transition cursor-pointer"
-              >
-                Send Request
-              </button>
-              {contactSuccess && (
-                <p className="text-[10px] text-emerald-600 font-bold font-serif">Logged successfully!</p>
-              )}
-            </form>
+              const visiblePolicies = allPolicyItems.slice(0, 4);
+
+              return (
+                <>
+                  {visiblePolicies.map((item) => {
+                    const isOpen = openPolicyId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className="bg-[#FAF6F0] border border-[#D8E2DC] rounded-xl overflow-hidden text-left"
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenPolicyId(isOpen ? null : item.id);
+                          }}
+                          className="w-full px-4 py-3.5 flex items-center justify-between text-left text-xs font-bold uppercase tracking-wider text-[#3D405B] hover:text-[#E07A5F] transition cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            {item.isHours ? (
+                              <Clock className="w-4 h-4 text-[#8FA89B] shrink-0" />
+                            ) : (
+                              <Shield className="w-4 h-4 text-[#8FA89B] shrink-0" />
+                            )}
+                            <span>{item.title}</span>
+                          </span>
+                          <span className={`text-[#8FA89B] font-extrabold text-sm transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                            {isOpen ? '−' : '+'}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-4 pb-3.5 text-2xs text-zinc-550 leading-relaxed font-sans border-t border-[#D8E2DC]/50 pt-2.5 font-medium">
+                            {item.isHours ? (
+                              <div className="space-y-1">
+                                <p><strong>Check-In Time:</strong> {hotelInfo.checkInTime || '14:00'}</p>
+                                <p><strong>Check-Out Time:</strong> {hotelInfo.checkOutTime || '11:00'}</p>
+                              </div>
+                            ) : (
+                              item.description
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {allPolicyItems.length > 4 && (
+                    <div className="pt-4 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPoliciesPopupOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-5 py-2 border border-[#8FA89B]/40 text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white text-3xs font-extrabold uppercase tracking-widest rounded-full transition cursor-pointer"
+                      >
+                        <span>Show More</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Policies Popup Modal */}
+                  {isPoliciesPopupOpen && (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-[9999] p-4" onClick={(e) => { e.stopPropagation(); setIsPoliciesPopupOpen(false); }}>
+                      <div className="bg-[#FAF6F0] w-full max-w-lg rounded-2xl shadow-xl border border-[#D8E2DC] overflow-hidden flex flex-col relative max-h-[80vh] animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="p-5 border-b border-[#D8E2DC] flex items-center justify-between bg-white">
+                          <h3 className="font-bold text-[#3D405B] text-xs uppercase tracking-wider" style={{ fontFamily: "'Playfair Display', serif" }}>
+                            {hotelInfo.policiesTitle || "Resort Guidelines"}
+                          </h3>
+                          <button
+                            onClick={() => setIsPoliciesPopupOpen(false)}
+                            className="p-1.5 rounded-lg hover:bg-gray-150 text-[#8FA89B] hover:text-[#3D405B] transition cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        {/* Content */}
+                        <div className="p-6 overflow-y-auto space-y-4 font-sans text-left">
+                          {allPolicyItems.map((item, idx) => (
+                            <div key={item.id} className="space-y-1 pb-3 border-b border-[#D8E2DC]/50 last:border-b-0">
+                              <h4 className="text-2xs font-extrabold text-[#3D405B] uppercase tracking-wide flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-[#EBF0EC] text-[#8FA89B] flex items-center justify-center text-3xs font-black">{idx + 1}</span>
+                                <span>{item.title}</span>
+                              </h4>
+                              <div className="text-3xs text-zinc-650 font-semibold pl-6 leading-relaxed font-sans">
+                                {item.isHours ? (
+                                  <div className="space-y-0.5 font-sans font-semibold">
+                                    <p><strong>Check-In Time:</strong> {hotelInfo.checkInTime || '14:00'}</p>
+                                    <p><strong>Check-Out Time:</strong> {hotelInfo.checkOutTime || '11:00'}</p>
+                                  </div>
+                                ) : (
+                                  item.description
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-[#D8E2DC] flex justify-end bg-white">
+                          <button
+                            onClick={() => setIsPoliciesPopupOpen(false)}
+                            className="bg-[#8FA89B] hover:bg-[#7D9387] text-white font-extrabold text-3xs uppercase tracking-wider px-5 py-2.5 rounded-xl transition cursor-pointer"
+                          >
+                            Close Guidelines
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </section>
@@ -1301,7 +1854,7 @@ export const OrganicTemplate: React.FC = () => {
           <div className="max-w-4xl mx-auto space-y-6 text-center">
             <div className="space-y-1.5">
               {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Experiences)</span> */}
-              <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+              <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
                 {hotelInfo.addonsTitle || "Eco-Upsells & Local Experiences"}
               </h3>
             </div>
@@ -1368,7 +1921,7 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="text-center space-y-1.5">
             {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Answers)</span> */}
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
               {hotelInfo.faqsTitle || "Resort FAQs"}
             </h3>
           </div>
@@ -1424,21 +1977,109 @@ export const OrganicTemplate: React.FC = () => {
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
           <div className="space-y-3.5 text-left font-sans">
             <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Location)</span>
-            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}>Resort Location</h3>
+            <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>Resort Location</h3>
             <p className="text-2xs text-zinc-550 leading-relaxed font-semibold">
               {hotelInfo.address}
             </p>
-            <div className="pt-1.5">
-              <a
-                href={`https://maps.google.com/?q=${hotelInfo.latitude},${hotelInfo.longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#8FA89B]/55 text-[#8FA89B] hover:bg-[#8FA89B] hover:text-white text-4xs uppercase tracking-widest font-extrabold rounded-full transition cursor-pointer font-sans"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Google Maps Navigation</span>
-              </a>
+
+            {/* Distance / Travel Time Calculator */}
+            <div className="mt-5 pt-4 border-t border-[#8FA89B]/25 space-y-3 font-sans" onClick={(e) => e.stopPropagation()}>
+              <label className="text-[10px] font-extrabold text-[#3D405B] uppercase tracking-wider block">
+                Calculate distance from other places
+              </label>
+
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-3.5 w-3.5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Type city or starting point..."
+                  value={mapSearchQuery}
+                  onChange={(e) => setMapSearchQuery(e.target.value)}
+                  className="block w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-2xs focus:outline-none focus:ring-1 focus:ring-[#8FA89B] focus:border-[#8FA89B] placeholder-gray-400 font-semibold"
+                />
+                {mapSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setMapSearchQuery('');
+                      setMapDistanceInfo(null);
+                      setMapRouteOrigin(null);
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-655"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+
+                {/* Autocomplete suggestions drop */}
+                {mapSuggestions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
+                    {mapSuggestions.map((place) => (
+                      <button
+                        key={place.id}
+                        onClick={() => handleSelectMapSuggestion(place)}
+                        className="w-full text-left px-3 py-2 text-2xs font-semibold text-gray-700 hover:bg-gray-50 flex items-start gap-2"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-[#8FA89B] shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-gray-900">{place.displayName}</div>
+                          <div className="text-[10px] text-gray-400">{place.formattedAddress}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Locator and Clear buttons */}
+              <div className="flex items-center justify-between gap-2 text-2xs">
+                <button
+                  onClick={handleUseCurrentLocation}
+                  disabled={isMapLocating}
+                  className="inline-flex items-center gap-1.5 text-2xs text-[#8FA89B] hover:text-[#7d9689] font-bold cursor-pointer transition disabled:opacity-50"
+                >
+                  <Compass className={`w-3.5 h-3.5 ${isMapLocating ? 'animate-spin' : ''}`} />
+                  <span>{isMapLocating ? 'Locating...' : 'Distance from my Current Location'}</span>
+                </button>
+
+                {mapDistanceInfo && (
+                  <button
+                    onClick={() => {
+                      setMapSearchQuery('');
+                      setMapDistanceInfo(null);
+                      setMapRouteOrigin(null);
+                    }}
+                    className="text-3xs text-rose-500 font-extrabold uppercase tracking-wider hover:underline"
+                  >
+                    Clear Route
+                  </button>
+                )}
+              </div>
+
+              {mapLocateError && (
+                <p className="text-[10px] text-rose-500 font-semibold">{mapLocateError}</p>
+              )}
+
+              {/* Calculated stats panel */}
+              {mapDistanceInfo && (
+                <div className="bg-[#FAF9F5] border border-[#EBE8DF] rounded-xl p-3.5 space-y-2 animate-in fade-in duration-200 text-left">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Car className="w-4 h-4 text-[#8FA89B]" />
+                    <span className="text-2xs font-bold">Estimated Route from <span className="text-[#3D405B]">{mapDistanceInfo.origin}</span></span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-0.5 text-left">
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block">Estimated Distance</span>
+                      <span className="text-sm font-black text-[#3D405B]">{mapDistanceInfo.distance} km</span>
+                    </div>
+                    <div className="space-y-0.5 text-left">
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block">Driving Duration</span>
+                      <span className="text-sm font-black text-[#3D405B]">{mapDistanceInfo.time}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1452,12 +2093,16 @@ export const OrganicTemplate: React.FC = () => {
                 style={{ border: 0 }}
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}&q=${hotelInfo.latitude},${hotelInfo.longitude}&zoom=15`}
+                src={
+                  mapRouteOrigin
+                    ? `https://maps.google.com/maps?saddr=${encodeURIComponent(mapRouteOrigin)}&daddr=${hotelInfo.latitude},${hotelInfo.longitude}&output=embed`
+                    : `https://maps.google.com/maps?q=${hotelInfo.latitude},${hotelInfo.longitude}&z=15&output=embed`
+                }
               />
             ) : (
               <div className="text-center z-10 space-y-1.5 p-4">
                 <MapPin className="w-6 h-6 text-[#E07A5F] animate-bounce mx-auto" />
-                <span className="text-[10px] text-[#3D405B] font-bold block uppercase tracking-wider font-serif" style={{ fontFamily: "'Fraunces', serif" }}>{hotelInfo.name} Mapping</span>
+                <span className="text-[10px] text-[#3D405B] font-bold block uppercase tracking-wider font-serif" style={{ fontFamily: "'Playfair Display', serif" }}>{hotelInfo.name} Mapping</span>
                 <span className="text-4xs text-[#556B2F] font-sans block font-semibold">{hotelInfo.latitude}° N, {hotelInfo.longitude}° E</span>
               </div>
             )}
@@ -1493,16 +2138,7 @@ export const OrganicTemplate: React.FC = () => {
             </span>
           </div>
           {hotelInfo.instagramHandle ? (
-            <div className="grid grid-cols-5 gap-1.5">
-              {instagramMock.map((url, index) => (
-                <div key={index} className="aspect-square relative overflow-hidden rounded-xl border border-[#D8E2DC] group/insta">
-                  <img src={url} alt="Social feed" className="w-full h-full object-cover group-hover/insta:scale-103 transition duration-300" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/insta:opacity-100 flex items-center justify-center transition duration-200">
-                    <span className="text-[8px] font-bold tracking-wider text-white font-sans">FOLLOW</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ImageReveal images={hotelInfo.instagramImages && hotelInfo.instagramImages.length >= 5 ? hotelInfo.instagramImages : instagramMock} />
           ) : (
             <div className="py-6 text-center text-xs text-zinc-400 bg-zinc-100/50 rounded-xl border border-zinc-200 font-medium">
               No Instagram handle configured. Click to add your Instagram ID in Contact settings.
@@ -1519,7 +2155,7 @@ export const OrganicTemplate: React.FC = () => {
     <div
       ref={scrollContainerRef}
       className="flex-1 overflow-y-auto bg-[#FAF6F0] text-[#333D29] relative"
-      style={{ fontFamily: "'Lexend', 'Plus Jakarta Sans', sans-serif" }}
+      style={{ fontFamily: "'Noto Sans', 'Plus Jakarta Sans', sans-serif" }}
     >
       <div className="bg-[#FAF6F0] relative z-10 shadow-2xl">
         {/* 1. HEADER (LOGO + MENU BAR) — TRANS-OVERLAY */}
@@ -1544,7 +2180,7 @@ export const OrganicTemplate: React.FC = () => {
               <h1
                 onClick={() => setPreviewPath('/')}
                 className={`font-semibold text-xs tracking-[0.2em] uppercase transition-colors duration-500`}
-                style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif", color: isScrolled ? '#3D405B' : '#ffffff' }}
+                style={{ fontFamily: "'Playfair Display', serif", color: isScrolled ? '#3D405B' : '#ffffff' }}
               >
                 {hotelInfo.name}
               </h1>
@@ -1605,12 +2241,25 @@ export const OrganicTemplate: React.FC = () => {
                 setIsBookingOpen(true);
                 setBookingStep('details');
               }}
-              className={`font-bold text-[9px] uppercase tracking-[0.2em] px-5 py-2 rounded-full transition-all duration-300 cursor-pointer whitespace-nowrap ${isScrolled
-                ? 'bg-[#8FA89B] hover:bg-[#7D9387] text-white shadow-sm'
-                : 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/40'
+              className={`group relative overflow-hidden rounded-full font-bold text-[9px] uppercase tracking-[0.2em] px-5 py-2.5 transition-all duration-300 cursor-pointer whitespace-nowrap text-center ${isScrolled
+                ? 'bg-transparent border border-[#8FA89B]/40 text-[#8FA89B] hover:text-white shadow-3xs'
+                : 'bg-white/10 backdrop-blur-xs border border-white/20 text-white hover:text-[#556B2F]'
                 }`}
             >
-              Book Now
+              <div className="flex items-center justify-center gap-1.5">
+                <div className={`h-1.5 w-1.5 rounded-full transition-all duration-300 group-hover:scale-[70] ${
+                  isScrolled ? 'bg-[#8FA89B]' : 'bg-white'
+                }`} />
+                <span className="inline-block transition-all duration-300 group-hover:translate-x-12 group-hover:opacity-0">
+                  Book Now
+                </span>
+              </div>
+              <div className={`absolute top-0 left-0 z-10 flex h-full w-full translate-x-12 items-center justify-center gap-1.5 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 ${
+                isScrolled ? 'text-white' : 'text-[#556B2F]'
+              }`}>
+                <span>Book Now</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
             </button>
 
             {/* Mobile Hamburger Toggle */}
@@ -1646,7 +2295,7 @@ export const OrganicTemplate: React.FC = () => {
               <div className="flex items-center justify-between px-6 py-5 border-b border-[#D8E2DC]/70">
                 <span
                   className="font-medium text-xs uppercase tracking-[0.22em] text-[#3D405B]"
-                  style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
+                  style={{ fontFamily: "'Playfair Display', serif" }}
                 >
                   {hotelInfo.name}
                 </span>
@@ -1761,7 +2410,7 @@ export const OrganicTemplate: React.FC = () => {
             ) : (
               <h4
                 className="text-white font-light text-xl tracking-[0.12em] uppercase"
-                style={{ fontFamily: "'Cormorant Garamond', 'Fraunces', serif" }}
+                style={{ fontFamily: "'Playfair Display', serif" }}
               >
                 {hotelInfo.name}
               </h4>
@@ -1856,7 +2505,7 @@ export const OrganicTemplate: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsAboutPopupOpen(false)}>
           <div className="bg-[#FAF6F0] rounded-3xl max-w-xl w-full max-h-[80vh] overflow-y-auto shadow-2xl border border-[#D8E2DC] animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-[#D8E2DC] flex items-center justify-between">
-              <h3 className="font-medium text-[#3D405B] text-lg" style={{ fontFamily: "'Cormorant Garamond', serif" }}>About {hotelInfo.name}</h3>
+              <h3 className="font-medium text-[#3D405B] text-lg" style={{ fontFamily: "'Playfair Display', serif" }}>About {hotelInfo.name}</h3>
               <button onClick={() => setIsAboutPopupOpen(false)} className="w-8 h-8 rounded-full bg-[#E8E2D6] flex items-center justify-center text-[#3D405B] hover:bg-[#D8E2DC] transition cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
@@ -1877,7 +2526,7 @@ export const OrganicTemplate: React.FC = () => {
           <div className="bg-[#FAF6F0] rounded-3xl max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl border border-[#D8E2DC] animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-[#D8E2DC] flex items-center justify-between">
               <div>
-                <h3 className="font-medium text-[#3D405B] text-lg" style={{ fontFamily: "'Cormorant Garamond', serif" }}>All Amenities</h3>
+                <h3 className="font-medium text-[#3D405B] text-lg" style={{ fontFamily: "'Playfair Display', serif" }}>All Amenities</h3>
                 <p className="text-[10px] text-[#8FA89B] uppercase tracking-wider mt-0.5">{hotelInfo.generalAmenities?.length || 0} amenities available</p>
               </div>
               <button onClick={() => setIsAmenitiesPopupOpen(false)} className="w-8 h-8 rounded-full bg-[#E8E2D6] flex items-center justify-center text-[#3D405B] hover:bg-[#D8E2DC] transition cursor-pointer">
@@ -1921,18 +2570,20 @@ export const OrganicTemplate: React.FC = () => {
         </div>
       )}
 
-      {/* Addon Detail Popup */}
+      {/* Addon / Event Detail Popup */}
       {selectedAddonDetail && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedAddonDetail(null)}>
-          <div className="bg-[#FAF6F0] rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-[#D8E2DC] animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-[#D8E2DC] flex items-center justify-between">
-              <h3 className="font-medium text-[#3D405B] text-base font-serif">Add-on Details</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedAddonDetail(null)}>
+          <div className="bg-[#FAF6F0] rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-[#D8E2DC] animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-[#D8E2DC] flex items-center justify-between shrink-0">
+              <h3 className="font-medium text-[#3D405B] text-base font-serif">
+                {selectedAddonDetail.isEvent ? 'Event Details' : 'Add-on Details'}
+              </h3>
               <button onClick={() => setSelectedAddonDetail(null)} className="w-8 h-8 rounded-full bg-[#E8E2D6] flex items-center justify-center text-[#3D405B] hover:bg-[#D8E2DC] transition cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
             
-            <div className="p-6 space-y-4 text-left">
+            <div className="p-6 space-y-4 text-left overflow-y-auto flex-1">
               {selectedAddonDetail.image && (
                 <div className="aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-50 border border-[#D8E2DC]">
                   <img
@@ -1950,10 +2601,58 @@ export const OrganicTemplate: React.FC = () => {
                     ₹{selectedAddonDetail.price}
                   </span>
                   <span className="text-[10px] bg-[#E8F0EC] text-[#55826A] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    {selectedAddonDetail.pricingType === 'per_head' ? 'Per Guest' : 'Flat Fee'}
+                    {selectedAddonDetail.isEvent ? 'Per Guest' : (selectedAddonDetail.pricingType === 'per_head' ? 'Per Guest' : 'Flat Fee')}
                   </span>
                 </div>
               </div>
+
+              {selectedAddonDetail.isEvent && (
+                <div className="space-y-1 bg-white border border-[#D8E2DC]/60 p-3 rounded-2xl">
+                  <span className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide block">Event Date</span>
+                  <div className="text-xs font-bold text-[#3D405B]">
+                    📅 {convertToDDMMYYYY(selectedAddonDetail.eventObj.date || selectedAddonDetail.eventObj.fromDate)}
+                  </div>
+                </div>
+              )}
+
+              {selectedAddonDetail.isEvent && selectedAddonDetail.eventObj.slots && selectedAddonDetail.eventObj.slots.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[9px] text-[#3D405B] font-extrabold uppercase tracking-wide block">Select Time Slot</span>
+                  <div className="grid grid-cols-1 gap-2">
+                    {selectedAddonDetail.eventObj.slots.map((s: any, idx: number) => {
+                      const sTime = `${formatTime12h(s.fromTime)} - ${formatTime12h(s.toTime)}`;
+                      const isSelected = addonQuantities[`Event: ${selectedAddonDetail.name} (${sTime})`] > 0;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setAddonQuantities(prev => {
+                              const next = { ...prev };
+                              // Clear all slot variations for this event
+                              Object.keys(next).forEach(k => {
+                                if (k.startsWith(`Event: ${selectedAddonDetail.name}`)) {
+                                  delete next[k];
+                                }
+                              });
+                              next[`Event: ${selectedAddonDetail.name} (${sTime})`] = 1;
+                              return next;
+                            });
+                          }}
+                          className={`p-2.5 border rounded-xl text-left text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                            isSelected 
+                              ? 'bg-[#EBF0EC] border-[#8FA89B] text-[#3D405B]' 
+                              : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                          }`}
+                        >
+                          <span>{sTime}</span>
+                          {isSelected && <span className="text-[9px] text-[#55826A] font-extrabold uppercase">Selected</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <p className="text-[11px] text-zinc-550 font-sans leading-relaxed whitespace-pre-line">
                 {selectedAddonDetail.description}
@@ -1961,33 +2660,77 @@ export const OrganicTemplate: React.FC = () => {
               
               <div className="pt-4 border-t border-[#D8E2DC]/50 flex flex-col gap-2">
                 {isBookingOpen ? (
-                  (addonQuantities[selectedAddonDetail.name] || 0) > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 0 }));
-                        setSelectedAddonDetail(null);
-                      }}
-                      className="w-full py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition text-xs font-bold font-sans cursor-pointer text-center"
-                    >
-                      Remove from Stay
-                    </button>
+                  selectedAddonDetail.isEvent ? (
+                    (() => {
+                      const matchedKey = Object.keys(addonQuantities).find(k => k.startsWith(`Event: ${selectedAddonDetail.name}`));
+                      const isBooked = !!matchedKey;
+                      return isBooked ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddonQuantities(prev => {
+                              const next = { ...prev };
+                              if (matchedKey) delete next[matchedKey];
+                              return next;
+                            });
+                            setSelectedAddonDetail(null);
+                          }}
+                          className="w-full py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition text-xs font-bold font-sans cursor-pointer text-center"
+                        >
+                          Remove Event from Stay
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddonQuantities(prev => {
+                              const next = { ...prev };
+                              if (selectedAddonDetail.eventObj.slots && selectedAddonDetail.eventObj.slots.length > 0) {
+                                const s = selectedAddonDetail.eventObj.slots[0];
+                                const sTime = `${formatTime12h(s.fromTime)} - ${formatTime12h(s.toTime)}`;
+                                next[`Event: ${selectedAddonDetail.name} (${sTime})`] = 1;
+                              } else {
+                                next[`Event: ${selectedAddonDetail.name}`] = 1;
+                              }
+                              return next;
+                            });
+                            setSelectedAddonDetail(null);
+                          }}
+                          className="w-full py-2.5 rounded-xl bg-[#8FA89B] text-white hover:bg-[#7D9689] transition text-xs font-bold font-sans cursor-pointer text-center shadow-xs"
+                        >
+                          Add Event to Stay (₹{selectedAddonDetail.price})
+                        </button>
+                      );
+                    })()
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 1 }));
-                        setSelectedAddonDetail(null);
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-[#8FA89B] text-white hover:bg-[#7D9689] transition text-xs font-bold font-sans cursor-pointer text-center shadow-xs"
-                    >
-                      Add to Stay (₹{selectedAddonDetail.price})
-                    </button>
+                    (addonQuantities[selectedAddonDetail.name] || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 0 }));
+                          setSelectedAddonDetail(null);
+                        }}
+                        className="w-full py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition text-xs font-bold font-sans cursor-pointer text-center"
+                      >
+                        Remove from Stay
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddonQuantities(prev => ({ ...prev, [selectedAddonDetail.name]: 1 }));
+                          setSelectedAddonDetail(null);
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-[#8FA89B] text-white hover:bg-[#7D9689] transition text-xs font-bold font-sans cursor-pointer text-center shadow-xs"
+                      >
+                        Add to Stay (₹{selectedAddonDetail.price})
+                      </button>
+                    )
                   )
                 ) : (
                   <div className="bg-[#E8F0EC]/40 border border-[#8FA89B]/25 rounded-2xl p-4 text-center">
                     <p className="text-[11px] text-[#55826A] font-semibold leading-relaxed font-sans">
-                      ✨ You can add this add-on to your stay during checkout when booking a room.
+                      ✨ You can add this to your stay during checkout when booking a room.
                     </p>
                   </div>
                 )}
@@ -2126,6 +2869,7 @@ export const OrganicTemplate: React.FC = () => {
             {/* Scrollable details */}
             <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left text-zinc-700">
               {bookingStep === 'details' ? (
+                <>
                 <form onSubmit={handleCreateBooking} className="space-y-4 text-xs">
                   {/* Step indicators */}
                   <div className="flex items-center justify-between border-b border-zinc-200 pb-3 mb-2 shrink-0">
@@ -2149,23 +2893,39 @@ export const OrganicTemplate: React.FC = () => {
                     <div className="space-y-4 animate-in fade-in duration-300">
                       {/* Integrated Date Picker in Styled Bar */}
                       <div className="bg-[#8FA89B]/10 border border-[#8FA89B]/25 p-3 rounded-2xl flex justify-between items-center text-xs text-[#333D29] font-extrabold tracking-wider uppercase">
-                        <div className="relative text-left flex-1">
+                        <div className="relative text-left flex-1 cursor-pointer">
                           <span className="text-[10px] text-zinc-500 block mb-0.5 font-extrabold">CHECK-IN</span>
+                          <div className="text-[13px] font-black text-[#333D29] pointer-events-none">
+                            {formatDateToDDMMYYYY(checkIn)}
+                          </div>
                           <input
                             type="date"
                             value={checkIn}
                             onChange={(e) => setCheckIn(e.target.value)}
-                            className="bg-transparent border-0 p-0 text-[13px] font-black text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                            onClick={(e) => {
+                              try {
+                                e.currentTarget.showPicker();
+                              } catch (err) {}
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                           />
                         </div>
                         <ChevronRight className="w-4.5 h-4.5 text-[#8FA89B] shrink-0 mx-2" />
-                        <div className="relative text-left flex-1">
+                        <div className="relative text-left flex-1 cursor-pointer">
                           <span className="text-[10px] text-zinc-500 block mb-0.5 font-extrabold">CHECK-OUT</span>
+                          <div className="text-[13px] font-black text-[#333D29] pointer-events-none">
+                            {formatDateToDDMMYYYY(checkOut)}
+                          </div>
                           <input
                             type="date"
                             value={checkOut}
                             onChange={(e) => setCheckOut(e.target.value)}
-                            className="bg-transparent border-0 p-0 text-[13px] font-black text-[#333D29] outline-none cursor-pointer w-full focus:ring-0"
+                            onClick={(e) => {
+                              try {
+                                e.currentTarget.showPicker();
+                              } catch (err) {}
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                           />
                         </div>
                         <div className="text-right shrink-0 ml-2">
@@ -2180,7 +2940,7 @@ export const OrganicTemplate: React.FC = () => {
                         <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
                           <div>
                             <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Adults</span>
-                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 18+</span>
+                            <span className="text-[11px] text-zinc-450 block font-semibold">Age {maxAge + 1}+</span>
                           </div>
                           <div className="flex items-center gap-2.5">
                             <button
@@ -2205,7 +2965,7 @@ export const OrganicTemplate: React.FC = () => {
                         <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
                           <div>
                             <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Children</span>
-                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 0-17</span>
+                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 0-{maxAge}</span>
                           </div>
                           <div className="flex items-center gap-2.5">
                             <button
@@ -2244,7 +3004,7 @@ export const OrganicTemplate: React.FC = () => {
                                   }}
                                   className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-2xs font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
                                 >
-                                  {[...Array(18)].map((_, a) => (
+                                  {[...Array(maxAge + 1)].map((_, a) => (
                                     <option key={a} value={a}>{a} yrs</option>
                                   ))}
                                 </select>
@@ -2314,9 +3074,25 @@ export const OrganicTemplate: React.FC = () => {
                                         Know More & Plan Details
                                       </button>
                                     </div>
-                                    <div className="text-right shrink-0">
-                                      <span className="text-sm font-black text-[#E07A5F] block">₹{rec.price.toLocaleString('en-IN')}</span>
-                                      <span className="text-[10px] text-zinc-450 font-semibold">total stay</span>
+                                    <div className="text-right shrink-0 flex flex-col items-end">
+                                      {rec.originalPrice > rec.price ? (
+                                        <>
+                                          <span className="line-through text-zinc-400 text-[10.5px] font-semibold block leading-none mb-0.5">
+                                            ₹{rec.originalPrice.toLocaleString('en-IN')}
+                                          </span>
+                                          <span className="text-sm font-black text-[#E07A5F] block leading-none">
+                                            ₹{rec.price.toLocaleString('en-IN')}
+                                          </span>
+                                          <span className="text-emerald-600 font-extrabold text-[9px] uppercase tracking-wide block mt-1">
+                                            {Math.round(((rec.originalPrice - rec.price) / rec.originalPrice) * 100)}% OFF
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="text-sm font-black text-[#E07A5F] block">
+                                          ₹{rec.price.toLocaleString('en-IN')}
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] text-zinc-450 font-semibold mt-1">total stay</span>
                                     </div>
                                   </div>
                                 </div>
@@ -2333,13 +3109,36 @@ export const OrganicTemplate: React.FC = () => {
                           <p className="text-xs text-zinc-500 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
                         </div>
                         <div className="space-y-2">
-                          {rooms.map(room => {
+                          {rooms.filter(room => {
+                            const minOcc = room.min_occupancy || 1;
+                            const totalRequired = adultsCount + childrenCount;
+                            return totalRequired >= minOcc;
+                          }).map(room => {
                             const count = currentSelectedRooms.filter(r => r.id === room.id).length;
                             return (
                               <div key={room.id} className="flex items-center justify-between py-1.5 border-b border-zinc-50 last:border-0">
                                 <div>
                                   <span className="font-extrabold text-[#3D405B] text-xs block uppercase">{room.name}</span>
-                                  <span className="text-[9px] text-[#E07A5F] font-semibold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-[#E07A5F] font-semibold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                                    {(() => {
+                                      const avail = getMinAvailableInventoryDuringStay(room.id);
+                                      const minOcc = room.min_occupancy || 1;
+                                      const totalRequired = adultsCount + childrenCount;
+                                      if (totalRequired < minOcc) {
+                                        return (
+                                          <span className="text-[9px] font-bold text-red-500">
+                                            (Min {minOcc} guests)
+                                          </span>
+                                        );
+                                      }
+                                      return (
+                                        <span className={`text-[9px] font-bold ${avail === 0 ? 'text-red-500' : 'text-zinc-400'}`}>
+                                          ({avail === 0 ? 'Sold Out' : `${avail} left`})
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -2360,8 +3159,17 @@ export const OrganicTemplate: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (count < (room.totalInventory || 5)) {
+                                      const minOcc = room.min_occupancy || 1;
+                                      const totalRequired = adultsCount + childrenCount;
+                                      if (totalRequired < minOcc) {
+                                        alert(`Category ${room.name} requires a minimum of ${minOcc} guests. You have selected ${totalRequired} guests.`);
+                                        return;
+                                      }
+                                      const avail = getMinAvailableInventoryDuringStay(room.id);
+                                      if (count < avail) {
                                         setSelectedRoomsList([...currentSelectedRooms, room]);
+                                      } else {
+                                        alert(`No more rooms available of category ${room.name} between ${checkIn} and ${checkOut}`);
                                       }
                                     }}
                                     className="w-5.5 h-5.5 rounded-full bg-zinc-50 border border-zinc-250 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer"
@@ -2418,29 +3226,64 @@ export const OrganicTemplate: React.FC = () => {
                       <div className="space-y-2">
                         <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider block">Choose Meal Plan</span>
                         <div className="grid grid-cols-2 gap-2">
-                          {[
-                            { key: 'ep', label: 'EP (Room Only)', rate: 'Free', desc: 'No meals included', show: true },
-                            { key: 'cp', label: 'CP (Breakfast)', rate: `+₹${hotelInfo.mealPlanCpAdultRate ?? 300}`, desc: 'Complimentary breakfast', show: hotelInfo.mealPlanCpEnabled !== false },
-                            { key: 'map', label: 'MAP (Half Board)', rate: `+₹${hotelInfo.mealPlanMapAdultRate ?? 1000}`, desc: 'Breakfast + lunch or dinner', show: hotelInfo.mealPlanMapEnabled !== false },
-                            { key: 'ap', label: 'AP (Full Board)', rate: `+₹${hotelInfo.mealPlanApAdultRate ?? 1500}`, desc: 'All daily meals included', show: hotelInfo.mealPlanApEnabled !== false },
-                          ].filter(plan => plan.show).map(plan => (
-                            <div
-                              key={plan.key}
-                              onClick={() => setSelectedMealPlan(plan.key as any)}
-                              className={`p-3 border rounded-2xl text-left cursor-pointer transition duration-200 ${
-                                selectedMealPlan === plan.key
-                                  ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
-                                  : 'bg-white border-zinc-200 hover:border-zinc-300'
-                              }`}
-                            >
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="font-bold text-[#3D405B] text-2xs uppercase block">{plan.label}</span>
-                                <span className="text-[9px] font-extrabold text-[#E07A5F]">{plan.rate}</span>
+                          {(() => {
+                            const isCpBase = hotelInfo.defaultMealPlan === 'CP';
+                            const cpAdult = hotelInfo.mealPlanCpAdultRate ?? 300;
+                            const mapAdult = hotelInfo.mealPlanMapAdultRate ?? 1000;
+                            const apAdult = hotelInfo.mealPlanApAdultRate ?? 1500;
+
+                            const plans = [
+                              { 
+                                key: 'ep', 
+                                label: 'EP (Room Only)', 
+                                rate: 'Free', 
+                                desc: 'No meals included', 
+                                show: !isCpBase 
+                              },
+                              { 
+                                key: 'cp', 
+                                label: 'CP (Breakfast)', 
+                                rate: isCpBase ? 'Free' : `+₹${cpAdult}`, 
+                                desc: 'Complimentary breakfast', 
+                                show: hotelInfo.mealPlanCpEnabled !== false 
+                              },
+                              { 
+                                key: 'map', 
+                                label: 'MAP (Half Board)', 
+                                rate: `+₹${isCpBase ? Math.max(0, mapAdult - cpAdult) : mapAdult}`, 
+                                desc: 'Breakfast + lunch or dinner', 
+                                show: hotelInfo.mealPlanMapEnabled !== false 
+                              },
+                              { 
+                                key: 'ap', 
+                                label: 'AP (Full Board)', 
+                                rate: `+₹${isCpBase ? Math.max(0, apAdult - cpAdult) : apAdult}`, 
+                                desc: 'All daily meals included', 
+                                show: hotelInfo.mealPlanApEnabled !== false 
+                              },
+                            ];
+
+                            return plans.filter(plan => plan.show).map(plan => (
+                              <div
+                                key={plan.key}
+                                onClick={() => setSelectedMealPlan(plan.key as any)}
+                                className={`p-3 border rounded-2xl text-left cursor-pointer transition duration-200 ${
+                                  selectedMealPlan === plan.key
+                                    ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
+                                    : 'bg-white border-zinc-200 hover:border-zinc-300'
+                                }`}
+                              >
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-bold text-[#3D405B] text-2xs uppercase block">{plan.label}</span>
+                                  <span className="text-[9px] font-extrabold text-[#E07A5F]">{plan.rate}</span>
+                                </div>
+                                <p className="text-[9.5px] text-zinc-400 leading-tight">{plan.desc}</p>
+                                <span className="text-[8px] text-zinc-400 block mt-1">
+                                  {plan.rate === 'Free' ? 'included in base rate' : 'per guest / night'}
+                                </span>
                               </div>
-                              <p className="text-[9.5px] text-zinc-400 leading-tight">{plan.desc}</p>
-                              <span className="text-[8px] text-zinc-400 block mt-1">per guest / night</span>
-                            </div>
-                          ))}
+                            ));
+                          })()}
                         </div>
                       </div>
 
@@ -2449,19 +3292,26 @@ export const OrganicTemplate: React.FC = () => {
                         <div className="space-y-2">
                           <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Add Stay Add-ons</span>
                           <div className="space-y-2.5">
-                            {addons.map(addon => {
+                            {(showAllAddons ? addons : addons.slice(0, 2)).map(addon => {
                               const qty = addonQuantities[addon.name] || 0;
                               return (
                                 <div
                                   key={addon.id}
-                                  onClick={() => setSelectedAddonDetail(addon)}
-                                  className={`flex items-center justify-between p-3 border rounded-2xl bg-white text-left transition cursor-pointer ${
+                                  className={`flex items-center justify-between p-3 border rounded-2xl bg-white text-left transition ${
                                     qty > 0 ? 'border-[#8FA89B] bg-[#FAF6F0]/20' : 'border-zinc-200'
                                   }`}
                                 >
                                   <div className="pr-2 max-w-[65%]">
                                     <span className="block font-bold uppercase text-[#3D405B] truncate text-3xs">{addon.name}</span>
-                                    <span className="text-[8px] text-zinc-400 leading-none block mt-0.5 line-clamp-1">{addon.description}</span>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedAddonDetail(addon)}
+                                        className="text-[9px] font-bold text-[#E07A5F] hover:underline cursor-pointer uppercase tracking-wider text-left"
+                                      >
+                                        Know More
+                                      </button>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2.5 shrink-0">
                                     <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">
@@ -2471,8 +3321,7 @@ export const OrganicTemplate: React.FC = () => {
                                     
                                     <button
                                       type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
+                                      onClick={() => {
                                         setAddonQuantities(prev => ({
                                           ...prev,
                                           [addon.name]: qty > 0 ? 0 : 1
@@ -2497,6 +3346,16 @@ export const OrganicTemplate: React.FC = () => {
                               );
                             })}
                           </div>
+                          {addons.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllAddons(!showAllAddons)}
+                              className="text-[9px] font-extrabold text-[#8FA89B] hover:text-[#7D9689] flex items-center gap-1 mt-1.5 mx-auto uppercase tracking-wider cursor-pointer"
+                            >
+                              <span>{showAllAddons ? 'Show Less' : `Show More (${addons.length - 2} more)`}</span>
+                              {showAllAddons ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <p className="text-[10px] text-zinc-400">No addons configured yet.</p>
@@ -2517,7 +3376,7 @@ export const OrganicTemplate: React.FC = () => {
                           <div className="space-y-2 mt-4 pt-4 border-t border-zinc-200">
                             <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Scheduled Events During Your Stay</span>
                             <div className="space-y-2.5">
-                              {stayEvents.map(evt => {
+                              {(showAllEvents ? stayEvents : stayEvents.slice(0, 2)).map(evt => {
                                 // Find any selected key starting with "Event: evt.title"
                                 const matchedKey = Object.keys(addonQuantities).find(k => k.startsWith(`Event: ${evt.title}`));
                                 const qty = matchedKey ? addonQuantities[matchedKey] : 0;
@@ -2544,20 +3403,22 @@ export const OrganicTemplate: React.FC = () => {
                                     <div className="flex items-center justify-between">
                                       <div className="pr-2 max-w-[65%]">
                                         <span className="block font-bold uppercase text-[#3D405B] truncate text-3xs">{evt.title}</span>
-                                        <span className="text-[8px] text-zinc-400 leading-none block mt-0.5 line-clamp-1">{evt.description}</span>
-                                        <span className="text-[7.5px] font-semibold text-zinc-450 block mt-1">
-                                          📅 {convertToDDMMYYYY(evt.date || evt.fromDate)}
-                                        </span>
-                                        {qty > 0 && selectedSlotTime && (
-                                          <span className="text-[7.5px] font-extrabold text-[#556B2F] block mt-0.5">
-                                            ⏰ SLOT: {selectedSlotTime}
-                                          </span>
-                                        )}
-                                        {remaining <= 5 && !isSoldOut && (
-                                          <span className="text-[7px] font-extrabold text-rose-500 uppercase tracking-wider block mt-0.5 animate-pulse">
-                                            🔥 Only {remaining} slots left!
-                                          </span>
-                                        )}
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedAddonDetail({
+                                              name: evt.title,
+                                              price: evt.priceAdult ?? evt.price ?? 0,
+                                              description: evt.description || 'No description available.',
+                                              image: evt.image || 'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=800&q=80',
+                                              isEvent: true,
+                                              eventObj: evt,
+                                            })}
+                                            className="text-[9px] font-bold text-[#E07A5F] hover:underline cursor-pointer uppercase tracking-wider text-left"
+                                          >
+                                            Know More
+                                          </button>
+                                        </div>
                                       </div>
                                       <div className="flex items-center gap-2.5 shrink-0">
                                         <span className="font-extrabold text-[#E07A5F] text-[10px] shrink-0">
@@ -2619,6 +3480,12 @@ export const OrganicTemplate: React.FC = () => {
                                       </div>
                                     </div>
 
+                                    {qty > 0 && selectedSlotTime && (
+                                      <span className="text-[7.5px] font-extrabold text-[#556B2F] block mt-1.5 bg-[#556B2F]/10 px-2 py-0.5 rounded-lg w-fit">
+                                        ⏰ SLOT: {selectedSlotTime}
+                                      </span>
+                                    )}
+
                                     {/* Timing Slot selector dropdown inside addon item */}
                                     {evt.slots && evt.slots.length > 0 && qty > 0 && (
                                       <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-1">
@@ -2658,6 +3525,16 @@ export const OrganicTemplate: React.FC = () => {
                                 );
                               })}
                             </div>
+                            {stayEvents.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowAllEvents(!showAllEvents)}
+                                className="text-[9px] font-extrabold text-[#8FA89B] hover:text-[#7D9689] flex items-center gap-1 mt-1.5 mx-auto uppercase tracking-wider cursor-pointer"
+                              >
+                                <span>{showAllEvents ? 'Show Less' : `Show More (${stayEvents.length - 2} more)`}</span>
+                                {showAllEvents ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            )}
                           </div>
                         );
                       })()}
@@ -2685,35 +3562,28 @@ export const OrganicTemplate: React.FC = () => {
                   {/* ───────────────── STEP 3 ───────────────── */}
                   {checkoutStep === 3 && (
                     <div className="space-y-4 animate-in fade-in duration-300">
-                      {/* Guest Details */}
-                      <div className="space-y-2">
-                        <span className="text-[8px] text-zinc-450 font-bold uppercase block tracking-wider">Guest Information</span>
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            required
-                            placeholder="Your Full Name"
-                            value={guestName}
-                            onChange={(e) => setGuestName(e.target.value)}
-                            className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="email"
-                              required
-                              placeholder="Email Address"
-                              value={guestEmail}
-                              onChange={(e) => setGuestEmail(e.target.value)}
-                              className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
-                            />
-                            <input
-                              type="tel"
-                              placeholder="Phone Number"
-                              value={guestPhone}
-                              onChange={(e) => setGuestPhone(e.target.value)}
-                              className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none"
-                            />
-                          </div>
+                      {/* Stay Summary & Cancellation Policy */}
+                      <div className="space-y-2.5">
+                        <div className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-2xl space-y-2 text-left text-xs font-semibold">
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Stay & Rooms Summary</span>
+                          {currentSelectedRooms.map((room, rIdx) => (
+                            <div key={`${room.id}-${rIdx}`} className="flex justify-between items-center text-zinc-700">
+                              <span className="font-extrabold capitalize">{room.name}</span>
+                              <span className="text-zinc-450">{checkIn} to {checkOut} ({totals.nights} Nights)</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-2xl space-y-1 text-left text-xs font-semibold">
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase block tracking-wider">Cancellation Policy</span>
+                          <p className="text-[10px] text-zinc-550 font-normal leading-relaxed font-sans mt-0.5 normal-case">
+                            {(() => {
+                              const targetDate = checkIn;
+                              const firstRoom = currentSelectedRooms[0];
+                              const policyType = firstRoom?.cancellation_policy_overrides?.[targetDate] || hotelInfo?.cancellationPolicyType || '2d';
+                              return getCancellationPolicyDescription(policyType, hotelInfo?.customCancellationPolicies);
+                            })()}
+                          </p>
                         </div>
                       </div>
 
@@ -2747,9 +3617,18 @@ export const OrganicTemplate: React.FC = () => {
 
                       {/* Pricing Breakdown Summary */}
                       <div className="p-4 bg-white rounded-2xl border border-zinc-200 space-y-2.5 text-3xs font-semibold uppercase tracking-wider font-sans">
-                        <div className="flex justify-between text-zinc-450">
+                        <div className="flex justify-between text-zinc-450 items-center">
                           <span>Room Subtotal ({totals.nights} Nights)</span>
-                          <span>₹{totals.subtotal.toLocaleString('en-IN')}</span>
+                          <div className="flex items-center gap-1.5">
+                            {totals.originalSubtotal > totals.subtotal && (
+                              <span className="line-through text-zinc-400 font-normal">
+                                ₹{totals.originalSubtotal.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                            <span className={totals.originalSubtotal > totals.subtotal ? 'text-[#E07A5F] font-black' : ''}>
+                              ₹{totals.subtotal.toLocaleString('en-IN')}
+                            </span>
+                          </div>
                         </div>
                         {totals.mealPlanTotal > 0 && (
                           <div className="flex justify-between text-zinc-450">
@@ -2769,6 +3648,53 @@ export const OrganicTemplate: React.FC = () => {
                             <span>-₹{totals.discount.toLocaleString('en-IN')}</span>
                           </div>
                         )}
+                        {/* Goods & Services Tax (GST) breakdown */}
+                        <div className="space-y-1 text-zinc-450 border-t border-zinc-100 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowGstBreakdown(prev => !prev)}
+                            className="flex justify-between items-center w-full hover:text-zinc-650 transition cursor-pointer select-none text-left"
+                          >
+                            <span className="flex items-center gap-1">
+                              <span>Goods & Services Tax (GST)</span>
+                              {showGstBreakdown ? (
+                                <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                              )}
+                            </span>
+                            <span>+₹{totals.gstTotal.toLocaleString('en-IN')}</span>
+                          </button>
+
+                          {showGstBreakdown && (
+                            <div className="pl-3 py-1.5 space-y-1 text-zinc-400 border-l border-[#8FA89B] bg-zinc-50/50 rounded-r-lg text-4xs uppercase tracking-widest leading-relaxed">
+                              {totals.gstBreakdown.roomsGst > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Rooms GST (Slab-wise)</span>
+                                  <span>₹{totals.gstBreakdown.roomsGst.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+                              {totals.gstBreakdown.mealPlanGst > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Meal Plan GST (18%)</span>
+                                  <span>₹{totals.gstBreakdown.mealPlanGst.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+                              {totals.gstBreakdown.eventsGst > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Events GST (18%)</span>
+                                  <span>₹{totals.gstBreakdown.eventsGst.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+                              {totals.gstBreakdown.addonsGst > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Ancillary Add-ons GST (18%)</span>
+                                  <span>₹{totals.gstBreakdown.addonsGst.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex justify-between font-black text-xs text-[#3D405B] border-t border-zinc-200 pt-2.5">
                           <span>Total Stay Invoice</span>
                           <span className="text-[#E07A5F]">₹{totals.grandTotal.toLocaleString('en-IN')}</span>
@@ -2780,21 +3706,265 @@ export const OrganicTemplate: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setCheckoutStep(2)}
-                          className="w-full py-2.5 border border-zinc-200 hover:bg-zinc-50 text-zinc-500 text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                          className="w-full py-2.5 border border-zinc-200 hover:bg-zinc-50 text-zinc-555 text-xs font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
                         >
                           Back
                         </button>
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={() => {
+                            if (currentSelectedRooms.length === 0) {
+                              alert('Please select at least one room.');
+                              return;
+                            }
+                            setIsOtpPopupOpen(true);
+                          }}
                           className="w-full py-2.5 bg-[#8FA89B] hover:bg-[#7D9387] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-sm cursor-pointer"
                         >
-                          Proceed to Payment
+                          Proceed
                         </button>
                       </div>
                     </div>
                   )}
 
                 </form>
+
+                {/* OTP and Payment verification popup modal overlay */}
+                {isOtpPopupOpen && (
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-sm border border-zinc-200 shadow-xl overflow-hidden flex flex-col max-h-[90%] text-left font-sans">
+                      <div className="p-4 bg-[#EBF0EC] border-b border-zinc-200 flex items-center justify-between">
+                        <h4 className="font-extrabold text-[#3D405B] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Shield className="w-4 h-4 text-[#8FA89B]" />
+                          <span>Guest Verification</span>
+                        </h4>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setIsOtpPopupOpen(false);
+                            setOtpSent(false);
+                            setOtpVerified(false);
+                            setEnteredOtp('');
+                            setOtpError(null);
+                          }} 
+                          className="p-1 rounded-lg text-zinc-555 hover:bg-zinc-200/50 hover:text-zinc-800 transition cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="p-5 overflow-y-auto space-y-4 text-xs font-semibold text-[#3D405B]">
+                        {!otpVerified ? (
+                          <>
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide">Your Full Name</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. John Doe"
+                                  value={guestName}
+                                  onChange={(e) => setGuestName(e.target.value)}
+                                  className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none font-sans font-bold"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide">Email Address</label>
+                                <input
+                                  type="email"
+                                  placeholder="e.g. john@example.com"
+                                  value={guestEmail}
+                                  onChange={(e) => setGuestEmail(e.target.value)}
+                                  className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none font-sans font-bold"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide">Phone Number</label>
+                                <input
+                                  type="tel"
+                                  placeholder="e.g. +91 9988776655"
+                                  value={guestPhone}
+                                  onChange={(e) => setGuestPhone(e.target.value)}
+                                  className="w-full bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-xs text-zinc-800 outline-none font-sans font-bold"
+                                />
+                              </div>
+                            </div>
+
+                            {!otpSent ? (
+                              <div className="space-y-3 pt-2">
+                                <span className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide block">Select OTP Delivery Method</span>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setOtpMethod('sms')}
+                                    className={`py-2 px-3 border rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                      otpMethod === 'sms'
+                                        ? 'bg-[#1C1917] border-[#1C1917] text-white'
+                                        : 'bg-white border-[#D8E2DC] text-zinc-650 hover:bg-zinc-50'
+                                    }`}
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>SMS OTP</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOtpMethod('whatsapp')}
+                                    className={`py-2 px-3 border rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                      otpMethod === 'whatsapp'
+                                        ? 'bg-emerald-700 border-emerald-700 text-white'
+                                        : 'bg-white border-[#D8E2DC] text-zinc-650 hover:bg-zinc-50'
+                                    }`}
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>WhatsApp</span>
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  disabled={!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()}
+                                  onClick={() => {
+                                    setOtpSent(true);
+                                    setOtpError(null);
+                                  }}
+                                  className="w-full py-2.5 bg-[#8FA89B] hover:bg-[#7D9387] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer mt-2"
+                                >
+                                  Send Verification Code
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-3 pt-2 animate-in slide-in-from-top-2 duration-200">
+                                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] rounded-xl font-semibold leading-relaxed">
+                                  Verification code has been sent to <span className="font-extrabold">{guestPhone}</span> via <span className="font-extrabold uppercase">{otpMethod}</span>. (Enter 1234 to verify)
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide block">Enter OTP Code</label>
+                                  <input
+                                    type="text"
+                                    maxLength={6}
+                                    placeholder="Enter code"
+                                    value={enteredOtp}
+                                    onChange={(e) => setEnteredOtp(e.target.value)}
+                                    className="w-full text-center bg-white border border-[#D8E2DC] rounded-xl px-3 py-2 text-sm text-zinc-800 font-black tracking-widest outline-none"
+                                  />
+                                </div>
+
+                                {otpError && <p className="text-[10px] text-rose-500 font-bold">{otpError}</p>}
+
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOtpSent(false);
+                                      setEnteredOtp('');
+                                      setOtpError(null);
+                                    }}
+                                    className="flex-1 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-555 rounded-xl text-xs font-bold uppercase transition cursor-pointer"
+                                  >
+                                    Change Info
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (enteredOtp === '1234' || enteredOtp.trim().length >= 4) {
+                                        setOtpVerified(true);
+                                        setOtpError(null);
+                                      } else {
+                                        setOtpError('Invalid verification code. Please enter 1234.');
+                                      }
+                                    }}
+                                    className="flex-1 py-2 bg-[#3D405B] hover:bg-[#2d304a] text-white rounded-xl text-xs font-bold uppercase transition cursor-pointer"
+                                  >
+                                    Verify Code
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="space-y-4 animate-in fade-in duration-300">
+                            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] rounded-xl font-semibold flex items-center gap-1.5">
+                              <Check className="w-4 h-4 text-emerald-600 shrink-0 font-bold" />
+                              <span>Identity Verified Successfully!</span>
+                            </div>
+
+                            <div className="space-y-2">
+                              <span className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-wide block">Select Payment Terms</span>
+                              <div className="space-y-2">
+                                {/* Pay Fully Option */}
+                                <label
+                                  onClick={() => setPaymentSelection('full')}
+                                  className={`p-3 border rounded-xl flex items-center justify-between cursor-pointer transition ${
+                                    paymentSelection === 'full'
+                                      ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/10'
+                                      : 'bg-white border-zinc-200 hover:border-[#8FA89B]/50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      checked={paymentSelection === 'full'}
+                                      onChange={() => setPaymentSelection('full')}
+                                      className="text-[#8FA89B] focus:ring-[#8FA89B]"
+                                    />
+                                    <div>
+                                      <span className="font-extrabold text-xs block text-zinc-800">Pay Fully</span>
+                                      <span className="text-[10px] text-zinc-450 block mt-0.5">Collect complete stay amount now</span>
+                                    </div>
+                                  </div>
+                                  <span className="font-black text-xs text-[#3D405B]">₹{totals.grandTotal.toLocaleString('en-IN')}</span>
+                                </label>
+
+                                {/* Pay Partially Option */}
+                                <label
+                                  onClick={() => setPaymentSelection('partial')}
+                                  className={`p-3 border rounded-xl flex items-center justify-between cursor-pointer transition ${
+                                    paymentSelection === 'partial'
+                                      ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/10'
+                                      : 'bg-white border-zinc-200 hover:border-[#8FA89B]/50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      checked={paymentSelection === 'partial'}
+                                      onChange={() => setPaymentSelection('partial')}
+                                      className="text-[#8FA89B] focus:ring-[#8FA89B]"
+                                    />
+                                    <div>
+                                      <span className="font-extrabold text-xs block text-[#3D405B]">Pay Partially</span>
+                                      <span className="text-[10px] text-zinc-450 block mt-0.5">Pay booking advance deposit ({hotelInfo.paymentCollectionPercent || 50}%)</span>
+                                    </div>
+                                  </div>
+                                  <span className="font-black text-xs text-[#3D405B]">
+                                    ₹{Math.round(totals.grandTotal * (hotelInfo.paymentCollectionPercent || 50) / 100).toLocaleString('en-IN')}
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleCreateBooking();
+                                setIsOtpPopupOpen(false);
+                                setOtpSent(false);
+                                setOtpVerified(false);
+                                setEnteredOtp('');
+                              }}
+                              className="w-full py-2.5 bg-[#8FA89B] hover:bg-[#7D9387] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer"
+                            >
+                              Pay Now
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
               ) : (
                 <div className="py-8 text-center space-y-4 font-sans animate-in fade-in duration-300">
                   <div className="w-12 h-12 bg-[#8FA89B]/10 text-[#8FA89B] rounded-full border border-[#8FA89B]/25 flex items-center justify-center mx-auto">
@@ -2806,6 +3976,11 @@ export const OrganicTemplate: React.FC = () => {
                     <p className="text-2xs text-zinc-550 max-w-[240px] mx-auto pt-2 leading-relaxed lowercase">
                       Thanks for booking. We have logged this reservation on your administrator dashboard.
                     </p>
+                    {paymentSelection === 'partial' && (
+                      <p className="text-[10px] font-extrabold text-[#E07A5F] max-w-[240px] mx-auto pt-2 leading-relaxed uppercase tracking-wider">
+                        ⚠️ The remaining balance must be paid directly at the hotel check-in desk.
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => setIsBookingOpen(false)}

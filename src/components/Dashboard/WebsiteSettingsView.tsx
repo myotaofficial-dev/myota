@@ -160,7 +160,6 @@ export const WebsiteSettingsView: React.FC = () => {
               </button>
             </div>
           </div>
-
           {/* Theme custom colors & scripts */}
           <form onSubmit={handleBrandingSave} className="ds-card p-6 space-y-5">
             <h3 className="font-bold text-[#1C1917] border-b border-[#E7E5E4] pb-2 flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
@@ -170,37 +169,37 @@ export const WebsiteSettingsView: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Primary Button Color</label>
+                <label className="ds-overline block">Primary Button Color</label>
                 <div className="flex gap-2.5">
                   <input
                     type="color"
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="w-10 h-10 border border-zinc-200 rounded-lg cursor-pointer"
+                    className="w-10 h-10 border border-[#E7E5E4] rounded-lg cursor-pointer"
                   />
                   <input
                     type="text"
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-3.5 text-sm text-zinc-900 outline-hidden font-mono"
+                    className="ds-input flex-1 font-mono"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Background Canvas Accent</label>
+                <label className="ds-overline block">Background Canvas Accent</label>
                 <div className="flex gap-2.5">
                   <input
                     type="color"
                     value={bgColor}
                     onChange={(e) => setBgColor(e.target.value)}
-                    className="w-10 h-10 border border-zinc-200 rounded-lg cursor-pointer"
+                    className="w-10 h-10 border border-[#E7E5E4] rounded-lg cursor-pointer"
                   />
                   <input
                     type="text"
                     value={bgColor}
                     onChange={(e) => setBgColor(e.target.value)}
-                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-3.5 text-sm text-zinc-900 outline-hidden font-mono"
+                    className="ds-input flex-1 font-mono"
                   />
                 </div>
               </div>
@@ -209,7 +208,7 @@ export const WebsiteSettingsView: React.FC = () => {
             {/* Analytics Injection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-600 uppercase tracking-wide flex items-center gap-1">
+                <label className="ds-overline flex items-center gap-1">
                   <Code className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Google Analytics Measurement ID</span>
                 </label>
@@ -218,12 +217,12 @@ export const WebsiteSettingsView: React.FC = () => {
                   placeholder="G-XXXXXXXXXX"
                   value={analyticsId}
                   onChange={(e) => setAnalyticsId(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-600 uppercase tracking-wide flex items-center gap-1">
+                <label className="ds-overline flex items-center gap-1">
                   <Code className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Facebook Pixel ID</span>
                 </label>
@@ -232,15 +231,15 @@ export const WebsiteSettingsView: React.FC = () => {
                   placeholder="1234567890"
                   value={facebookId}
                   onChange={(e) => setFacebookId(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3.5 py-2 text-sm text-zinc-900 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end border-t border-zinc-100 pt-4">
+            <div className="flex items-center justify-end border-t border-[#E7E5E4] pt-4">
               <button
                 type="submit"
-                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-950 text-sm font-bold rounded-lg shadow-md transition"
+                className="ds-btn-primary"
               >
                 Save Theme Details
               </button>
@@ -252,41 +251,41 @@ export const WebsiteSettingsView: React.FC = () => {
         <div className="space-y-6">
           
           {/* Payment Gateway Config */}
-          <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-4">
-            <h3 className="font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-2">
-              <CreditCard className="w-4.5 h-4.5 text-amber-500" />
+          <div className="ds-card p-6 space-y-4 bg-white">
+            <h3 className="font-bold text-[#1C1917] border-b border-[#E7E5E4] pb-2 flex items-center gap-2">
+              <CreditCard className="w-4.5 h-4.5 text-[#1B93A4]" />
               <span>Payment Gateway Setup</span>
             </h3>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-2.5 bg-zinc-50 border border-zinc-100 rounded-lg">
+              <div className="flex items-center justify-between p-2.5 bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl text-left">
                 <span className="text-xs font-bold text-zinc-700">Enable Stripe Gateway</span>
                 <input
                   type="checkbox"
                   checked={gatewayEnabled}
                   onChange={(e) => setGatewayEnabled(e.target.checked)}
-                  className="w-4.5 h-4.5 accent-amber-500 rounded-sm cursor-pointer"
+                  className="w-4.5 h-4.5 accent-[#1B93A4] rounded-sm cursor-pointer"
                 />
               </div>
 
               {gatewayEnabled && (
-                <div className="space-y-3 animate-in slide-in-from-top-2 duration-150">
+                <div className="space-y-3 animate-in slide-in-from-top-2 duration-150 text-left">
                   <div className="space-y-1">
-                    <label className="text-4xs font-bold text-zinc-500 uppercase tracking-wide">Publishable Key</label>
+                    <label className="ds-overline block">Publishable Key</label>
                     <input
                       type="text"
                       value={stripePublishableKey}
                       onChange={(e) => setStripePublishableKey(e.target.value)}
-                      className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-1.5 text-xs text-zinc-700 outline-hidden font-mono transition"
+                      className="ds-input w-full font-mono text-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-4xs font-bold text-zinc-500 uppercase tracking-wide">Secret Key</label>
+                    <label className="ds-overline block">Secret Key</label>
                     <input
                       type="password"
                       value={stripeSecretKey}
                       onChange={(e) => setStripeSecretKey(e.target.value)}
-                      className="w-full bg-zinc-50 border border-zinc-200 focus:border-amber-500 focus:bg-white rounded-lg px-3 py-1.5 text-xs text-zinc-700 outline-hidden font-mono transition"
+                      className="ds-input w-full font-mono text-xs"
                     />
                   </div>
                 </div>
@@ -295,15 +294,15 @@ export const WebsiteSettingsView: React.FC = () => {
           </div>
 
           {/* Custom Pages list */}
-          <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-              <h3 className="font-bold text-zinc-900 flex items-center gap-2">
-                <Layers className="w-4.5 h-4.5 text-amber-500" />
+          <div className="ds-card p-6 space-y-4 bg-white">
+            <div className="flex items-center justify-between border-b border-[#E7E5E4] pb-2">
+              <h3 className="font-bold text-[#1C1917] flex items-center gap-2">
+                <Layers className="w-4.5 h-4.5 text-[#1B93A4]" />
                 <span>Custom Static Pages</span>
               </h3>
               <button
                 onClick={() => setIsAddingPage(!isAddingPage)}
-                className="text-xs font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-0.5"
+                className="text-xs font-semibold text-[#1B93A4] hover:text-[#157A8A] flex items-center gap-0.5"
               >
                 <span>{isAddingPage ? 'Close' : 'Add New'}</span>
               </button>
@@ -311,59 +310,58 @@ export const WebsiteSettingsView: React.FC = () => {
 
             {/* Custom page add subform */}
             {isAddingPage ? (
-              <form onSubmit={handleAddPage} className="p-3 bg-zinc-50 border border-zinc-150 rounded-lg space-y-3 animate-in slide-in-from-top-2 duration-150">
+              <form onSubmit={handleAddPage} className="p-3.5 bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl space-y-3 animate-in slide-in-from-top-2 duration-150 text-left">
                 <div className="space-y-1">
-                  <label className="text-4xs font-bold text-zinc-500 uppercase">Page Title</label>
+                  <label className="ds-overline block">Page Title</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Hiking Tours"
                     value={pageTitle}
                     onChange={(e) => setPageTitle(e.target.value)}
-                    className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-xs text-zinc-900 outline-hidden"
+                    className="ds-input w-full text-xs py-1.5"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-4xs font-bold text-zinc-500 uppercase">Slug Path</label>
+                  <label className="ds-overline block">Slug Path</label>
                   <input
                     type="text"
                     placeholder="e.g. hiking-tours"
                     value={pageSlug}
                     onChange={(e) => setPageSlug(e.target.value)}
-                    className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-xs text-zinc-900 outline-hidden"
+                    className="ds-input w-full text-xs py-1.5"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full py-1.5 bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition"
+                  className="ds-btn-primary w-full py-2 text-xs"
                 >
                   Create Custom Page
                 </button>
               </form>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 text-left">
                 {customPages.map(page => (
-                  <div key={page.id} className="p-3 bg-zinc-50 rounded-lg flex items-center justify-between border border-zinc-100">
+                  <div key={page.id} className="p-3 bg-[#FAFAF9] rounded-xl flex items-center justify-between border border-[#E7E5E4]">
                     <div>
-                      <h4 className="font-bold text-xs text-zinc-900 leading-none">{page.title}</h4>
-                      <span className="text-[10px] text-zinc-400 font-mono">/{page.slug}</span>
+                      <h4 className="font-bold text-xs text-[#1C1917] leading-none">{page.title}</h4>
+                      <span className="text-[10px] text-zinc-450 font-mono">/{page.slug}</span>
                     </div>
 
                     <button
                       onClick={() => deleteCustomPage(page.id)}
-                      className="p-1 text-zinc-400 hover:text-rose-600 rounded-md hover:bg-rose-50/50 transition"
+                      className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#E76F51] hover:bg-[#FEF0ED] transition cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
                 {customPages.length === 0 && (
-                  <div className="text-center py-4 text-zinc-400 text-xs">No custom pages added.</div>
+                  <div className="text-center py-4 text-[#A8A29E] text-xs">No custom pages added.</div>
                 )}
               </div>
             )}
           </div>
-
         </div>
 
       </div>

@@ -20,6 +20,15 @@ export const Overview: React.FC = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
   };
 
+  const formatDateToDDMMYYYY = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  };
+
   return (
     <div className="space-y-6 text-left">
       {/* Header */}
@@ -113,7 +122,7 @@ export const Overview: React.FC = () => {
                   <div>
                     <h4 className="font-bold text-sm text-[#1C1917]">{booking.guestName}</h4>
                     <p className="text-xs text-[#78716C] mt-0.5">
-                      {booking.roomName} • {booking.checkIn} to {booking.checkOut}
+                      {booking.roomName} • {formatDateToDDMMYYYY(booking.checkIn)} to {formatDateToDDMMYYYY(booking.checkOut)}
                     </p>
                   </div>
                 </div>

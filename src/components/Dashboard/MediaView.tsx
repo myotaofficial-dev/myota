@@ -27,6 +27,9 @@ export const MediaView: React.FC = () => {
       const query = `${hotelInfo.name} ${hotelInfo.address}`;
       const candidates = await searchPlaces(query);
       if (candidates.length > 0) {
+        if (candidates[0].id.startsWith('osm-')) {
+          throw new Error("Your Google Maps API key is restricted or unauthorized. Please ensure 'Places API (New)' and 'Maps Embed API' are enabled for your key in the Google Cloud Console to sync Google Business listings.");
+        }
         const details = await getPlaceDetails(candidates[0].id);
         if (details.photos && details.photos.length > 0) {
           let count = 0;
@@ -97,10 +100,10 @@ export const MediaView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900" style={{ fontFamily: 'Outfit, sans-serif' }}>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
             {isVideoMode ? 'Manage Videos' : 'Manage Photos'}
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-[#78716C]">
             {isVideoMode
               ? 'Upload showcase videos, tag them by topic, and set your cover video.'
               : 'Upload photos, add category tags (rooms, pool, dining…), and set hero images.'}
@@ -111,7 +114,7 @@ export const MediaView: React.FC = () => {
             type="button"
             onClick={handleSyncGoogleBusiness}
             disabled={syncingGoogle}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+            className="inline-flex items-center gap-2 bg-[#1B93A4] hover:bg-[#157A8A] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
           >
             {syncingGoogle ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
             <span>{syncingGoogle ? 'Syncing...' : 'Sync Google Business'}</span>
@@ -120,25 +123,25 @@ export const MediaView: React.FC = () => {
       </div>
 
       {/* Gallery Title Config */}
-      <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-2">
-        <label className="text-xs font-bold text-zinc-700">Gallery Section Title</label>
+      <div className="ds-card p-5 space-y-2 text-left">
+        <label className="ds-overline block">Gallery Section Title</label>
         <p className="text-[10px] text-zinc-400">The heading shown above the photo gallery on the homepage.</p>
         <input
           type="text"
           value={hotelInfo.galleryTitle || 'Natural Vignettes'}
           onChange={(e) => updateHotelInfo({ galleryTitle: e.target.value })}
           placeholder="e.g. Natural Vignettes"
-          className="w-full bg-zinc-50 border border-zinc-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition"
+          className="ds-input w-full"
         />
       </div>
 
       {/* Upload Zone */}
-      <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs p-5">
-        <div className="border-2 border-dashed border-zinc-200 hover:border-blue-400 bg-zinc-50/60 rounded-xl p-8 flex flex-col items-center justify-center text-center transition">
-          <div className="w-11 h-11 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-3">
+      <div className="ds-card p-5">
+        <div className="border-2 border-dashed border-[#E7E5E4] hover:border-[#1B93A4] bg-[#FAFAF9] rounded-xl p-8 flex flex-col items-center justify-center text-center transition">
+          <div className="w-11 h-11 bg-[#E6F5F7] text-[#1B93A4] rounded-full flex items-center justify-center mb-3">
             {isVideoMode ? <Video className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
           </div>
-          <span className="font-semibold text-zinc-700 text-sm mb-0.5">
+          <span className="font-semibold text-[#1C1917] text-sm mb-0.5">
             {isVideoMode ? 'Upload your video clip' : 'Drag & drop your photos here'}
           </span>
           <span className="text-zinc-400 text-[10px] uppercase tracking-widest font-medium">
@@ -158,8 +161,8 @@ export const MediaView: React.FC = () => {
             onClick={() => setActiveFilter(tag)}
             className={`px-3.5 py-1.5 rounded-full text-[11px] font-semibold transition capitalize ${
               activeFilter === tag
-                ? 'bg-zinc-900 text-white'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-[#1B93A4] text-white'
+                : 'bg-zinc-100 text-zinc-650 hover:bg-zinc-200'
             }`}
           >
             {tag === 'all' ? `All (${activeItems.length})` : tag}
@@ -172,12 +175,12 @@ export const MediaView: React.FC = () => {
         {filteredItems.map(item => (
           <div
             key={item.id}
-            className={`bg-white border rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between ${
-              item.isHero ? 'border-blue-500 ring-2 ring-blue-100' : 'border-zinc-200'
+            className={`ds-card overflow-hidden transition-all duration-205 flex flex-col justify-between ${
+              item.isHero ? 'ring-2 ring-[#1B93A4] border-[#1B93A4]' : ''
             }`}
           >
             {/* Image / Video Container */}
-            <div className="relative aspect-[4/3] bg-zinc-150 overflow-hidden flex items-center justify-center">
+            <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden flex items-center justify-center">
               {isVideoMode ? (
                 <>
                   <video src={item.url} className="w-full h-full object-cover" preload="metadata" />
@@ -189,7 +192,7 @@ export const MediaView: React.FC = () => {
                 <img src={item.url} alt="Property view" className="w-full h-full object-cover" />
               )}
               {item.isHero && (
-                <span className="absolute top-3 left-3 bg-blue-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">
+                <span className="absolute top-3 left-3 bg-[#1B93A4] text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">
                   COVER
                 </span>
               )}
@@ -201,7 +204,7 @@ export const MediaView: React.FC = () => {
                 {item.tags.map(t => (
                   <span
                     key={t}
-                    className="inline-flex items-center bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold capitalize px-2.5 py-0.5 rounded-full"
+                    className="ds-badge ds-badge-teal text-[10px] font-bold capitalize"
                   >
                     {t}
                   </span>
@@ -211,7 +214,7 @@ export const MediaView: React.FC = () => {
                   onClick={() => {
                     setAddingTagId(item.id);
                   }}
-                  className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-800 bg-white border border-zinc-200 text-[10px] font-medium px-2.5 py-0.5 rounded-full cursor-pointer transition"
+                  className="inline-flex items-center gap-1 text-[#78716C] hover:text-[#1C1917] bg-white border border-[#E7E5E4] text-[10px] font-medium px-2.5 py-0.5 rounded-full cursor-pointer transition"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Add Tag</span>
@@ -219,17 +222,19 @@ export const MediaView: React.FC = () => {
               </div>
 
               {/* Action row Divider */}
-              <div className="border-t border-zinc-100 pt-3 flex items-center justify-end">
+              <div className="border-t border-[#E7E5E4] pt-3 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => {
-                    if (isVideoMode) {
-                      deleteManagedVideo(item.id);
-                    } else {
-                      deleteManagedPhoto(item.id);
+                    if (confirm('Delete this media?')) {
+                      if (isVideoMode) {
+                        deleteManagedVideo(item.id);
+                      } else {
+                        deleteManagedPhoto(item.id);
+                      }
                     }
                   }}
-                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-red-650 transition cursor-pointer"
+                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-[#E76F51] transition cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span className="text-xs font-semibold">Delete</span>
@@ -240,7 +245,7 @@ export const MediaView: React.FC = () => {
         ))}
 
         {filteredItems.length === 0 && (
-          <div className="col-span-full py-16 text-center bg-zinc-50 border border-dashed border-zinc-200 rounded-2xl">
+          <div className="col-span-full py-16 text-center bg-[#FAFAF9] border border-dashed border-[#E7E5E4] rounded-2xl">
             {isVideoMode ? <Video className="w-8 h-8 text-zinc-300 mx-auto mb-2" /> : <ImageIcon className="w-8 h-8 text-zinc-300 mx-auto mb-2" />}
             <p className="text-zinc-500 text-xs font-semibold">
               No {isVideoMode ? 'videos' : 'photos'} match the selected tag.
@@ -251,36 +256,38 @@ export const MediaView: React.FC = () => {
 
       {/* Image Labels Modal */}
       {addingTagId && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative text-left">
-            <button
-              onClick={() => setAddingTagId(null)}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-[#E7E5E4] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 relative text-left">
+            <div className="p-5 border-b border-[#E7E5E4] flex items-center justify-between bg-[#FAFAF9]">
+              <h3 className="font-bold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Image Labels</h3>
+              <button 
+                onClick={() => setAddingTagId(null)} 
+                className="p-1.5 rounded-lg hover:bg-[#F5F5F4] text-[#A8A29E] hover:text-[#1C1917] transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <h3 className="text-lg font-bold text-zinc-950 font-sans">Image Labels</h3>
-            <p className="text-xs text-zinc-500 mt-1 font-sans">
-              Search existing labels from the database or create a new one for this image.
-            </p>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-[#78716C]">
+                Search existing labels from the database or create a new one for this image.
+              </p>
 
-            <div className="mt-4 space-y-4">
               {/* Selected Tags list with remove buttons */}
-              <div className="min-h-[42px] p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl flex flex-wrap gap-1.5 items-center">
+              <div className="min-h-[42px] p-2.5 bg-[#FAFAF9] border border-[#E7E5E4] rounded-xl flex flex-wrap gap-1.5 items-center">
                 {(() => {
                   const targetItem = activeItems.find(item => item.id === addingTagId);
                   if (!targetItem) return null;
                   return targetItem.tags.map(tag => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-600 text-xs font-bold px-2 py-0.5 rounded-full"
+                      className="inline-flex items-center gap-1 bg-[#E6F5F7] border border-[#1B93A4]/35 text-[#1B93A4] text-xs font-bold px-2 py-0.5 rounded-full"
                     >
                       <span>{tag}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveTag(addingTagId, tag)}
-                        className="hover:text-red-500 cursor-pointer"
+                        className="hover:text-[#E76F51] cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -303,7 +310,7 @@ export const MediaView: React.FC = () => {
 
               {/* Pre-made standard categories list */}
               <div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mb-2">
+                <span className="ds-overline block mb-2">
                   Suggested Categories
                 </span>
                 <div className="flex flex-wrap gap-2">
@@ -331,8 +338,8 @@ export const MediaView: React.FC = () => {
                         }}
                         className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition cursor-pointer ${
                           isSelected
-                            ? 'bg-blue-600 border-blue-600 text-white'
-                            : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-600'
+                            ? 'bg-[#1B93A4] border-[#1B93A4] text-white font-bold'
+                            : 'bg-zinc-50 hover:bg-zinc-100 border-[#E7E5E4] text-[#78716C]'
                         }`}
                       >
                         {suggestedTag}
@@ -341,16 +348,16 @@ export const MediaView: React.FC = () => {
                   })}
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setAddingTagId(null)}
-                className="bg-zinc-950 hover:bg-zinc-850 active:scale-97 text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer transition shadow-sm"
-              >
-                Done
-              </button>
+              <div className="pt-4 border-t border-[#E7E5E4] flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setAddingTagId(null)}
+                  className="ds-btn-primary"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -150,6 +150,9 @@ CREATE TABLE hotel_settings (
   -- Active Template
   current_template       TEXT NOT NULL DEFAULT 'organic',
 
+  -- Offers
+  offers                 JSONB NOT NULL DEFAULT '[]'::jsonb,
+
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

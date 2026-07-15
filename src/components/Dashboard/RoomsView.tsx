@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import type { RoomType, BedConfig, ExtraBedConfig } from '../../context/HotelContext';
-import { Plus, Edit2, Trash2, X, Sparkles, BedDouble, Users, Maximize, CheckCircle, Info, Save, Baby, Utensils, ChevronRight, ChevronLeft, ImageIcon, UploadCloud } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Sparkles, BedDouble, Users, Maximize, CheckCircle, Info, Save, Baby, Utensils, ChevronRight, ChevronLeft, ImageIcon, UploadCloud, Loader2 } from 'lucide-react';
+import { uploadMediaFile } from '../../services/StorageService';
 
 
 const KNOWN_AMENITIES = [
@@ -135,11 +136,14 @@ const DualRangeSlider: React.FC<{
 };
 
 export const RoomsView: React.FC = () => {
-  const { rooms, addRoom, updateRoom, deleteRoom, hotelInfo, updateHotelInfo, managedPhotos } = useHotel();
+  const { rooms, addRoom, updateRoom, deleteRoom, hotelInfo, updateHotelInfo, managedPhotos, addManagedPhoto } = useHotel();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showUploadErrorPopup, setShowUploadErrorPopup] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const movePhotoLeft = (idx: number) => {
@@ -172,15 +176,81 @@ export const RoomsView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    setUploadError(null);
+    setShowUploadErrorPopup(null);
+    const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
+    if (file.size > MAX_SIZE) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      const msg = `"${file.name}" is ${fileSizeMB} MB, which exceeds the 3MB upload limit. Please compress or resize your file before uploading.`;
+      setUploadError(msg);
+      setShowUploadErrorPopup(msg);
+      e.target.value = '';
+      return;
+    }
+    
+    setIsUploading(true);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      if (base64 && !selectedPhotos.includes(base64)) {
-        setSelectedPhotos(prev => [...prev, base64]);
-      }
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 1200; // Optimal HD resolution boundary
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Export as compressed WebP Blob and upload directly
+          canvas.toBlob(async (blob) => {
+            if (blob) {
+              try {
+                const publicUrl = await uploadMediaFile(blob, `${file.name.split('.')[0] || 'room_photo'}.webp`);
+                if (publicUrl && !selectedPhotos.includes(publicUrl)) {
+                  setSelectedPhotos(prev => [...prev, publicUrl]);
+                }
+              } catch (uploadErr: any) {
+                console.warn('[RoomsView] WebP upload failed, falling back to base64:', uploadErr);
+                const webpBase64 = canvas.toDataURL('image/webp', 0.8);
+                if (!selectedPhotos.includes(webpBase64)) {
+                  setSelectedPhotos(prev => [...prev, webpBase64]);
+                }
+              } finally {
+                setIsUploading(false);
+              }
+            }
+          }, 'image/webp', 0.8);
+        } else {
+          const base64 = event.target?.result as string;
+          if (base64 && !selectedPhotos.includes(base64)) {
+            setSelectedPhotos(prev => [...prev, base64]);
+          }
+          setIsUploading(false);
+        }
+      };
+      img.onerror = () => {
+        const base64 = event.target?.result as string;
+        if (base64 && !selectedPhotos.includes(base64)) {
+          setSelectedPhotos(prev => [...prev, base64]);
+        }
+        setIsUploading(false);
+      };
+      img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
-    // Reset file input value so same file can be uploaded again if needed
     e.target.value = '';
   };
 
@@ -383,8 +453,18 @@ export const RoomsView: React.FC = () => {
     if (beds.sofa) bedStrings.push(`${beds.sofa} Sofa Bed`);
     const derivedBedType = bedStrings.join(', ') || 'Custom Layout';
 
-    // basePrice fallback is lowest tier price
-    const lowestPrice = Math.min(...Object.values(priceTiers));
+    // Filter price tiers only to guest counts shown/configured in 'Base Price / Night (EP - Room Only)'
+    const startGuests = Math.max(1, minOccupancy);
+    const endGuests = Math.max(startGuests, baseOccupancy);
+    const filteredPriceTiers: Record<string, number> = {};
+    for (let i = startGuests; i <= endGuests; i++) {
+      const key = String(i);
+      filteredPriceTiers[key] = priceTiers[key] || 3000;
+    }
+
+    // basePrice fallback is lowest tier price of active tiers
+    const tierVals = Object.values(filteredPriceTiers);
+    const lowestPrice = tierVals.length > 0 ? Math.min(...tierVals) : 3000;
 
     // Combine managed + uploaded photos
     const allPhotos = [...selectedPhotos];
@@ -404,7 +484,7 @@ export const RoomsView: React.FC = () => {
       is_active: isActive,
       beds,
       extra_beds: extraBeds,
-      price_tiers: priceTiers,
+      price_tiers: filteredPriceTiers,
       min_occupancy: minOccupancy,
       base_occupancy: baseOccupancy
     };
@@ -414,6 +494,20 @@ export const RoomsView: React.FC = () => {
     } else {
       addRoom(data);
     }
+
+    // Auto-sync photos to Media Library
+    const roomTag = name.toLowerCase().trim().replace(/\s+/g, '-');
+    allPhotos.forEach(url => {
+      const alreadyExists = managedPhotos.some(p => p.url === url);
+      if (!alreadyExists && url && !url.startsWith('/')) {
+        addManagedPhoto({
+          url,
+          tags: [roomTag, 'rooms'],
+          isHero: false
+        });
+      }
+    });
+
     setIsEditing(false);
   };
 
@@ -1003,6 +1097,23 @@ export const RoomsView: React.FC = () => {
             </div>
           );
         })}
+
+        {/* Add New Room Card next to the last room created */}
+        <button
+          type="button"
+          onClick={openAddModal}
+          className="border border-dashed border-[#1B93A4] bg-white rounded-[20px] p-5 flex flex-col items-center justify-center min-h-[260px] hover:bg-[#1B93A4]/5 hover:border-solid hover:shadow-md transition duration-200 cursor-pointer group text-center"
+        >
+          <div className="w-12 h-12 rounded-full border border-dashed border-[#1B93A4] flex items-center justify-center text-[#1B93A4] group-hover:scale-110 transition duration-200 bg-[#E6F5F7]">
+            <Plus className="w-6 h-6" />
+          </div>
+          <span className="font-extrabold text-[#1B93A4] text-sm mt-3.5 block" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Add Room Type
+          </span>
+          <p className="text-[11px] text-[#78716C] mt-1 max-w-[180px] leading-snug">
+            Configure bed layouts, pricing tiers, and capacity.
+          </p>
+        </button>
       </div>
 
       {/* 3-Step Room Editor Modal */}
@@ -1321,6 +1432,18 @@ export const RoomsView: React.FC = () => {
             {/* ── STEP 3: Photos ── */}
             {modalStep === 3 && (
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {uploadError && (
+                  <div className="flex items-center gap-2 p-3 text-xs text-[#E76F51] bg-[#FEF0ED] border border-[#E76F51]/20 rounded-xl animate-in fade-in duration-150">
+                    <span className="flex-1 font-semibold">{uploadError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setUploadError(null)}
+                      className="text-[#E76F51] hover:text-[#E76F51]/80 font-bold text-xs"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
                 
                 {/* Header with Title and Upload button */}
                 <div className="flex items-start justify-between gap-4 pb-2">
@@ -1333,11 +1456,20 @@ export const RoomsView: React.FC = () => {
                   <button
                     type="button"
                     onClick={triggerUploadNew}
-                    className="border border-zinc-200 rounded-[12px] p-3 flex flex-col items-center justify-center bg-white hover:bg-zinc-50 transition w-20 h-16 shrink-0 shadow-xs cursor-pointer"
+                    disabled={isUploading}
+                    className="border border-zinc-200 rounded-[12px] p-3 flex flex-col items-center justify-center bg-white hover:bg-zinc-50 transition w-20 h-16 shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
                   >
-                    <UploadCloud className="w-4.5 h-4.5 text-zinc-500 mb-1" />
-                    <span className="text-[10px] font-bold text-zinc-700 leading-none">Upload</span>
-                    <span className="text-[10px] font-bold text-zinc-700 leading-none mt-0.5">New</span>
+                    {isUploading ? (
+                      <Loader2 className="w-4.5 h-4.5 text-[#1B93A4] animate-spin mb-1" />
+                    ) : (
+                      <UploadCloud className="w-4.5 h-4.5 text-zinc-500 mb-1" />
+                    )}
+                    <span className="text-[10px] font-bold text-zinc-700 leading-none">
+                      {isUploading ? 'Uploading' : 'Upload'}
+                    </span>
+                    <span className="text-[10px] font-bold text-zinc-700 leading-none mt-0.5">
+                      {isUploading ? '...' : 'New'}
+                    </span>
                   </button>
                   <input
                     ref={fileInputRef}
@@ -1516,6 +1648,27 @@ export const RoomsView: React.FC = () => {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showUploadErrorPopup && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-[#FAF6F0] rounded-2xl p-6 max-w-sm w-full border border-[#D8E2DC] shadow-xl text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+              <Info className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-[#3D405B] text-sm uppercase tracking-wider font-sans">Upload Error</h3>
+              <p className="text-2xs text-[#78716C] leading-relaxed font-sans">{showUploadErrorPopup}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUploadErrorPopup(null)}
+              className="w-full bg-[#1B93A4] hover:bg-[#157A8A] text-white font-extrabold text-[10px] uppercase tracking-wider py-2.5 rounded-xl transition cursor-pointer"
+            >
+              Acknowledge
+            </button>
           </div>
         </div>
       )}

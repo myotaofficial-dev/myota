@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import { Sidebar } from './Sidebar';
 import { PreviewFrame } from './PreviewFrame';
-import { 
-  ChevronLeft, Eye, Send, Monitor, Tablet, Smartphone, Check 
+import {
+  ChevronLeft, Eye, Send, Monitor, Tablet, Smartphone, Check
 } from 'lucide-react';
 
 // Form dispatcher
@@ -22,9 +22,10 @@ import { EventsAdminView } from './EventsAdminView';
 import { PaymentGatewayView } from './PaymentGatewayView';
 import { CustomPagesView } from './CustomPagesView';
 import { CancellationPoliciesView } from './CancellationPoliciesView';
+import { OffersPromotionsView } from './OffersPromotionsView';
 
 export const DashboardLayout: React.FC = () => {
-  const { 
+  const {
     selectedView, setAppMode, activePropertyId, setActivePropertyId,
     propertiesList, selectedTheme, setSelectedTheme, canvasMode, setCanvasMode,
     previewDevice, setPreviewDevice, publishProperty, editorFocus, setEditorFocus
@@ -58,7 +59,7 @@ export const DashboardLayout: React.FC = () => {
         return <DomainView />;
       case 'media':
       case 'media-videos':
-        return <MediaView />;
+         return <MediaView />;
       case 'rooms':
         return <RoomsView />;
       case 'pricing-calendar':
@@ -71,6 +72,8 @@ export const DashboardLayout: React.FC = () => {
         return <CancellationPoliciesView />;
       case 'coupons':
         return <CouponsView />;
+      case 'offers-promotions':
+        return <OffersPromotionsView />;
       case 'messages':
         return <GuestMessagesView />;
       case 'testimonials-admin':
@@ -101,27 +104,27 @@ export const DashboardLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#F8FAFC] overflow-hidden text-zinc-800 animate-in fade-in duration-150">
-      
+
       {/* Top Editor Navigation Bar (Image 2) */}
       <header className="bg-white border-b border-zinc-200 h-14 px-6 flex items-center justify-between z-20 shrink-0 select-none">
-        
+
         {/* Left Side: Back button & Brand */}
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => setAppMode('dashboard')}
             className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-950 transition cursor-pointer"
             title="Back to Platform Dashboard"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
-          
+
           <div className="flex items-center gap-2 border-l border-[#E7E5E4] pl-4">
             <div className="w-6 h-6 rounded-md flex items-center justify-center text-white font-bold" style={{ background: 'var(--ds-primary)' }}>
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
               </svg>
             </div>
-            <h1 className="font-extrabold text-xs text-[#1C1917] tracking-widest uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>Bolt Editor</h1>
+            <h1 className="font-extrabold text-xs text-[#1C1917] tracking-widest uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>MyOTA Editor</h1>
           </div>
         </div>
 
@@ -170,11 +173,10 @@ export const DashboardLayout: React.FC = () => {
             /* Guest Mode Preview Toggle */
             <button
               onClick={() => setCanvasMode(isGuestMode ? 'editor' : 'guest')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                isGuestMode 
-                  ? 'bg-[#1C1917] text-white border-[#1C1917]' 
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${isGuestMode
+                  ? 'bg-[#1C1917] text-white border-[#1C1917]'
                   : 'bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]'
-              }`}
+                }`}
             >
               <Eye className="w-3.5 h-3.5" />
               <span>{isGuestMode ? 'Exit Preview' : 'Preview'}</span>
@@ -195,7 +197,7 @@ export const DashboardLayout: React.FC = () => {
 
       {/* Editor Body */}
       <div className="flex-1 flex overflow-hidden">
-        
+
         {isGuestMode ? (
           /* Full screen Guest Preview Mode */
           <div className="flex-1 flex flex-col h-full bg-zinc-200 overflow-hidden relative animate-in fade-in duration-150">
@@ -207,7 +209,7 @@ export const DashboardLayout: React.FC = () => {
           /* Editor Workspace */
           <>
             <Sidebar />
-            
+
             {editorFocus === 'form' ? (
               /* Form Focus Mode (Image 2 Layout) - Centers settings in spacious layout */
               <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-8 scrollbar-thin scrollbar-thumb-zinc-200 flex justify-center animate-in fade-in slide-in-from-right duration-200">
@@ -218,34 +220,34 @@ export const DashboardLayout: React.FC = () => {
             ) : (
               /* Canvas Focus Mode (Clean site preview canvas) */
               <div className="flex-1 flex flex-col h-full bg-zinc-200 overflow-hidden relative animate-in fade-in slide-in-from-left duration-200">
-                
+
                 {/* Preview frame wrapper */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <PreviewFrame />
                 </div>
 
                 {/* Bottom Viewport Floating Bar widget (Image 2) */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-zinc-200 px-4 py-2 flex items-center justify-between gap-5 z-20 select-none">
-                  
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg border border-[#E7E5E4] px-4 py-2 flex items-center justify-between gap-5 z-20 select-none">
+
                   {/* Viewport toggles */}
-                  <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                  <div className="flex items-center bg-[#FAFAF9] p-0.5 rounded-xl border border-[#E7E5E4]">
                     <button
                       onClick={() => setPreviewDevice('desktop')}
-                      className={`p-1.5 rounded-md transition cursor-pointer ${previewDevice === 'desktop' ? 'bg-white text-zinc-950 shadow-3xs' : 'text-zinc-400 hover:text-zinc-600'}`}
+                      className={`p-1.5 rounded-lg transition cursor-pointer ${previewDevice === 'desktop' ? 'bg-white text-[#1B93A4] shadow-xs' : 'text-[#78716C] hover:text-[#1C1917]'}`}
                       title="Desktop View"
                     >
                       <Monitor className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setPreviewDevice('tablet')}
-                      className={`p-1.5 rounded-md transition cursor-pointer ${previewDevice === 'tablet' ? 'bg-white text-zinc-950 shadow-3xs' : 'text-zinc-400 hover:text-zinc-600'}`}
+                      className={`p-1.5 rounded-lg transition cursor-pointer ${previewDevice === 'tablet' ? 'bg-white text-[#1B93A4] shadow-xs' : 'text-[#78716C] hover:text-[#1C1917]'}`}
                       title="Tablet View"
                     >
                       <Tablet className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setPreviewDevice('mobile')}
-                      className={`p-1.5 rounded-md transition cursor-pointer ${previewDevice === 'mobile' ? 'bg-white text-zinc-950 shadow-3xs' : 'text-zinc-400 hover:text-zinc-600'}`}
+                      className={`p-1.5 rounded-lg transition cursor-pointer ${previewDevice === 'mobile' ? 'bg-white text-[#1B93A4] shadow-xs' : 'text-[#78716C] hover:text-[#1C1917]'}`}
                       title="Mobile View"
                     >
                       <Smartphone className="w-4 h-4" />
@@ -253,14 +255,14 @@ export const DashboardLayout: React.FC = () => {
                   </div>
 
                   {/* Zoom tag */}
-                  <span className="text-3xs font-bold text-zinc-400 uppercase tracking-wider">
+                  <span className="text-3xs font-bold text-[#A8A29E] uppercase tracking-wider">
                     100%
                   </span>
 
                   {/* Editor Canvas Mode Toggle */}
                   <button
                     onClick={() => setCanvasMode(canvasMode === 'editor' ? 'guest' : 'editor')}
-                    className="px-3 py-1 text-3xs font-extrabold uppercase tracking-widest border bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 rounded-md transition cursor-pointer"
+                    className="px-3.5 py-1.5 text-3xs font-extrabold uppercase tracking-wider border border-[#E7E5E4] bg-[#FAFAF9] text-[#78716C] hover:bg-[#F5F5F4] rounded-xl transition cursor-pointer"
                   >
                     Guest View
                   </button>

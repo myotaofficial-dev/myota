@@ -25,14 +25,14 @@ export const PaymentGatewayView: React.FC = () => {
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between text-left">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900">Payment Gateway Settings</h2>
-          <p className="text-sm text-zinc-500">Configure online payment integrations for reservations and custom day packages.</p>
+          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Payment Gateway Settings</h2>
+          <p className="text-sm text-[#78716C]">Configure online payment integrations for reservations and custom day packages.</p>
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-md transition cursor-pointer"
+          className="ds-btn-primary flex items-center gap-2 cursor-pointer"
         >
           {saveSuccess ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
           <span>{saveSuccess ? 'Settings Saved!' : 'Save Integration'}</span>
@@ -41,15 +41,15 @@ export const PaymentGatewayView: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Stripe Configuration */}
-        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 space-y-4">
+        <div className="ds-card p-6 space-y-4 text-left">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="bg-indigo-50 p-2 rounded-lg text-indigo-600 block">
+              <span className="bg-[#E6F5F7] p-2 rounded-lg text-[#1B93A4] block">
                 <CreditCard className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-zinc-900 text-sm">Stripe Payments</h3>
-                <p className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">Global credit/debit card</p>
+                <h3 className="font-bold text-[#1C1917] text-sm">Stripe Payments</h3>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Global credit/debit card</p>
               </div>
             </div>
             {/* Toggle switch */}
@@ -60,28 +60,28 @@ export const PaymentGatewayView: React.FC = () => {
                 onChange={(e) => setStripeEnabled(e.target.checked)} 
                 className="sr-only peer" 
               />
-              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1B93A4]"></div>
             </label>
           </div>
 
           {stripeEnabled && (
-            <div className="space-y-3 pt-3 border-t border-zinc-100 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-zinc-650 uppercase tracking-wider text-[10px]">Stripe Publishable Key</label>
+            <div className="space-y-3 pt-3 border-t border-[#E7E5E4] text-xs">
+              <div className="space-y-1.5">
+                <label className="ds-overline block">Stripe Publishable Key</label>
                 <input
                   type="text"
                   value={stripeKey}
                   onChange={(e) => setStripeKey(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 text-zinc-800 focus:bg-white focus:border-indigo-500 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="font-bold text-zinc-650 uppercase tracking-wider text-[10px]">Stripe Secret Key</label>
+              <div className="space-y-1.5">
+                <label className="ds-overline block">Stripe Secret Key</label>
                 <input
                   type="password"
                   value={stripeSecret}
                   onChange={(e) => setStripeSecret(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 text-zinc-800 focus:bg-white focus:border-indigo-500 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
             </div>
@@ -89,15 +89,15 @@ export const PaymentGatewayView: React.FC = () => {
         </div>
 
         {/* Razorpay Configuration */}
-        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 space-y-4">
+        <div className="ds-card p-6 space-y-4 text-left">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="bg-emerald-50 p-2 rounded-lg text-emerald-600 block">
+              <span className="bg-[#E6F5F7] p-2 rounded-lg text-[#1B93A4] block">
                 <CreditCard className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-zinc-900 text-sm">Razorpay Checkout</h3>
-                <p className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">UPI, Cards & NetBanking</p>
+                <h3 className="font-bold text-[#1C1917] text-sm">Razorpay Checkout</h3>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">UPI, Cards & NetBanking</p>
               </div>
             </div>
             {/* Toggle switch */}
@@ -108,20 +108,20 @@ export const PaymentGatewayView: React.FC = () => {
                 onChange={(e) => setRazorpayEnabled(e.target.checked)} 
                 className="sr-only peer" 
               />
-              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1B93A4]"></div>
             </label>
           </div>
 
           {razorpayEnabled && (
-            <div className="space-y-3 pt-3 border-t border-zinc-100 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-zinc-650 uppercase tracking-wider text-[10px]">Razorpay Key ID</label>
+            <div className="space-y-3 pt-3 border-t border-[#E7E5E4] text-xs">
+              <div className="space-y-1.5">
+                <label className="ds-overline block">Razorpay Key ID</label>
                 <input
                   type="text"
                   placeholder="rzp_test_..."
                   value={razorpayKey}
                   onChange={(e) => setRazorpayKey(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 text-zinc-800 focus:bg-white focus:border-emerald-500 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
             </div>
@@ -129,15 +129,15 @@ export const PaymentGatewayView: React.FC = () => {
         </div>
 
         {/* PayPal Configuration */}
-        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 space-y-4">
+        <div className="ds-card p-6 space-y-4 text-left">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="bg-blue-50 p-2 rounded-lg text-blue-600 block">
+              <span className="bg-[#E6F5F7] p-2 rounded-lg text-[#1B93A4] block">
                 <CreditCard className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-zinc-900 text-sm">PayPal Checkout</h3>
-                <p className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">Express Checkout</p>
+                <h3 className="font-bold text-[#1C1917] text-sm">PayPal Checkout</h3>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Express Checkout</p>
               </div>
             </div>
             {/* Toggle switch */}
@@ -148,20 +148,20 @@ export const PaymentGatewayView: React.FC = () => {
                 onChange={(e) => setPaypalEnabled(e.target.checked)} 
                 className="sr-only peer" 
               />
-              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1B93A4]"></div>
             </label>
           </div>
 
           {paypalEnabled && (
-            <div className="space-y-3 pt-3 border-t border-zinc-100 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-zinc-650 uppercase tracking-wider text-[10px]">PayPal Client ID</label>
+            <div className="space-y-3 pt-3 border-t border-[#E7E5E4] text-xs">
+              <div className="space-y-1.5">
+                <label className="ds-overline block">PayPal Client ID</label>
                 <input
                   type="text"
                   placeholder="Client ID string..."
                   value={paypalClient}
                   onChange={(e) => setPaypalClient(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 text-zinc-800 focus:bg-white focus:border-blue-500 outline-hidden transition"
+                  className="ds-input w-full"
                 />
               </div>
             </div>
@@ -170,18 +170,18 @@ export const PaymentGatewayView: React.FC = () => {
       </div>
 
       {/* Global Config Settings */}
-      <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 max-w-3xl text-xs">
+      <div className="ds-card bg-[#FAFAF9] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 max-w-3xl text-xs text-left">
         <div className="flex items-center gap-3">
-          <ShieldCheck className="w-6 h-6 text-zinc-455 shrink-0" />
+          <ShieldCheck className="w-6 h-6 text-[#1B93A4] shrink-0" />
           <div>
-            <h4 className="font-bold text-zinc-900">Secure Vault Protocol</h4>
-            <p className="text-zinc-500 leading-relaxed">All payment transactions are encrypted and routed directly to active gateway vaults.</p>
+            <h4 className="font-bold text-[#1C1917]">Secure Vault Protocol</h4>
+            <p className="text-[#78716C] leading-relaxed">All payment transactions are encrypted and routed directly to active gateway vaults.</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4 shrink-0 font-semibold text-zinc-700">
-          <div className="space-y-1">
-            <span className="block text-[9px] uppercase text-zinc-455 font-bold tracking-wider">Gateway Sandbox</span>
+          <div className="space-y-1 text-left">
+            <span className="ds-overline block">Gateway Sandbox</span>
             <label className="relative inline-flex items-center cursor-pointer">
               <input 
                 type="checkbox" 
@@ -189,16 +189,16 @@ export const PaymentGatewayView: React.FC = () => {
                 onChange={(e) => setIsSandbox(e.target.checked)} 
                 className="sr-only peer" 
               />
-              <div className="w-8 h-4 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+              <div className="w-8 h-4 bg-zinc-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#1B93A4]"></div>
             </label>
           </div>
 
-          <div className="space-y-1">
-            <span className="block text-[9px] uppercase text-zinc-455 font-bold tracking-wider">Base Currency</span>
+          <div className="space-y-1 text-left">
+            <span className="ds-overline block font-sans">Base Currency</span>
             <select 
               value={currency} 
               onChange={(e) => setCurrency(e.target.value)} 
-              className="bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-xs outline-hidden focus:border-blue-500 transition font-bold"
+              className="ds-input py-1 font-bold"
             >
               <option value="USD">USD ($)</option>
               <option value="INR">INR (₹)</option>

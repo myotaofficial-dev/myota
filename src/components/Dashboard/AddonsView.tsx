@@ -82,7 +82,7 @@ export const AddonsView: React.FC = () => {
           value={hotelInfo.addonsTitle || 'Eco-Upsells & Local Experiences'} 
           onChange={(e) => updateHotelInfo({ addonsTitle: e.target.value })}
           placeholder="e.g. Eco-Upsells & Local Experiences"
-          className="w-full bg-[#FAFAF9] border border-[#E7E5E4] focus:border-[#1B93A4] focus:bg-white rounded-xl px-3.5 py-2.5 text-xs text-zinc-800 outline-hidden transition font-sans" 
+          className="ds-input w-full text-xs py-2.5" 
         />
       </div>
 

@@ -9,10 +9,20 @@ import {
 } from 'date-fns';
 
 export const PricingCalendarView: React.FC = () => {
-  const { rooms, pricing, updateDateOverride, setRooms, hotelInfo } = useHotel();
+  const { 
+    rooms, pricing, updateDateOverride, setRooms, hotelInfo, 
+    getAvailableInventory, propertiesList, activePropertyId, setActivePropertyId 
+  } = useHotel();
   
   const [activeTab, setActiveTab] = useState<'calendar' | 'grid'>('calendar');
   const [selectedRoomId, setSelectedRoomId] = useState<string>(rooms[0]?.id || '');
+
+  // Synchronize selectedRoomId when rooms change (e.g. switching property)
+  useEffect(() => {
+    if (rooms.length > 0 && !rooms.some(r => r.id === selectedRoomId)) {
+      setSelectedRoomId(rooms[0].id);
+    }
+  }, [rooms, selectedRoomId]);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   
   // 7-day grid starting date
@@ -118,8 +128,8 @@ export const PricingCalendarView: React.FC = () => {
     const roomPricing = pricing[roomId] || {};
     const override = roomPricing[dateStr];
     
-    // Inventory override or default
-    const inventory = targetRoom?.inventory_overrides?.[dateStr] ?? (targetRoom?.totalInventory ?? 5);
+    // Inventory override minus active overlapping bookings
+    const inventory = getAvailableInventory(roomId, dateStr);
     
     // Price overrides per-tier or base fallback
     const basePrice = targetRoom?.basePrice ?? 3000;
@@ -407,6 +417,20 @@ export const PricingCalendarView: React.FC = () => {
         <div>
           <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Pricing & Inventory</h2>
           <p className="text-sm text-[#78716C]">Adjust daily prices, physical inventory allocations, and manage room blockout parameters.</p>
+        </div>
+
+        {/* Property Selector Dropdown */}
+        <div className="flex items-center gap-2.5 bg-white px-4.5 py-2.5 border border-[#E7E5E4] rounded-xl shrink-0">
+          <span className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Active Property:</span>
+          <select
+            value={activePropertyId || ''}
+            onChange={(e) => setActivePropertyId(e.target.value)}
+            className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-3 py-1.5 text-xs text-[#1C1917] font-semibold outline-none focus:border-[#1B93A4]"
+          >
+            {propertiesList.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Tab switchers */}

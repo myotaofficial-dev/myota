@@ -3,7 +3,7 @@ import { useHotel } from '../../context/HotelContext';
 import {
   Info, FileText, Sparkles, MapPin, Phone, UserCheck,
   Image, BedDouble, Calendar, Globe, Plus, BadgePercent, HelpCircle,
-  Move, Mail, MessageSquare, ShieldCheck, Eye, CreditCard, Layout, Video
+  Move, Mail, MessageSquare, ShieldCheck, Eye, CreditCard, Layout, Video, Tag
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -46,6 +46,7 @@ export const Sidebar: React.FC = () => {
       items: [
         { id: "rooms", label: "Rooms", icon: BedDouble },
         { id: "pricing-calendar", label: "Pricing & Calendar", icon: Calendar },
+        { id: "offers-promotions", label: "Offers & Promotions", icon: Tag },
         { id: "cancellation-policies", label: "Cancellation policies", icon: ShieldCheck },
         { id: "channel-manager", label: "Channel Manager", icon: Globe },
         { id: "addons", label: "Add-ons", icon: Plus },

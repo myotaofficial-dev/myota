@@ -57,6 +57,7 @@ export interface HotelInfo {
   disabledSections?: string[];
   menuItemsOrder?: string[];
   disabledMenuItems?: string[];
+  instagramImages?: string[];
 
   // Policy & Meal Plans configurations
   childPolicyEnabled?: boolean;
@@ -84,6 +85,7 @@ export interface HotelInfo {
   paymentCollectionType?: 'full' | 'partial';
   paymentCollectionPercent?: number;
   currentTemplate?: string;
+  offers?: any[];
 }
 
 // Co-host with role permissions
@@ -163,6 +165,14 @@ export interface RoomPricing {
   };
 }
 
+export interface RefundRecord {
+  id: string;
+  amount: number;
+  reason: string;
+  createdAt: string;
+  refundType: 'source' | 'credits';
+}
+
 export interface Booking {
   id: string;
   roomId: string;
@@ -173,7 +183,7 @@ export interface Booking {
   checkIn: string; // YYYY-MM-DD
   checkOut: string; // YYYY-MM-DD
   totalPrice: number;
-  paymentStatus: 'pending' | 'paid' | 'refunded';
+  paymentStatus: 'pending' | 'paid' | 'refunded' | 'partially_paid';
   bookingStatus: 'confirmed' | 'cancelled' | 'checked_in';
   addons: string[];
   couponCode?: string;
@@ -181,6 +191,8 @@ export interface Booking {
   adults?: number;
   children?: number;
   selectedSlot?: string;
+  paidAmount?: number;
+  refunds?: RefundRecord[];
 }
 
 export interface Addon {
@@ -284,6 +296,19 @@ export interface GuestMessage {
   read: boolean;
 }
 
+export interface GstSlab {
+  min: number;
+  max: number;
+  rate: number;
+}
+
+export interface GstSettings {
+  room_slabs: GstSlab[];
+  addons_rate: number;
+  events_rate: number;
+  meal_plans_rate: number;
+}
+
 export interface HotelContextType {
   appMode: 'landing' | 'onboarding' | 'dashboard' | 'editor';
   setAppMode: (mode: 'landing' | 'onboarding' | 'dashboard' | 'editor') => void;
@@ -291,6 +316,8 @@ export interface HotelContextType {
   setActivePropertyId: (id: string) => void;
   setPropertiesList: React.Dispatch<React.SetStateAction<PropertyItem[]>>;
   setHotelInfoState: React.Dispatch<React.SetStateAction<HotelInfo>>;
+  gstSettings: GstSettings;
+  updateGstSettings: (updates: Partial<GstSettings>) => Promise<void>;
   canvasMode: 'editor' | 'guest';
   setCanvasMode: (mode: 'editor' | 'guest') => void;
   selectedTheme: string;
@@ -341,8 +368,10 @@ export interface HotelContextType {
   updateRoom: (id: string, room: Partial<RoomType>) => void;
   deleteRoom: (id: string) => void;
   updateDateOverride: (roomId: string, date: string, override: Partial<PricingOverride>) => void;
-  addBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => void;
+  addBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => Promise<string>;
   cancelBooking: (id: string) => void;
+  updateBooking: (id: string, updates: Partial<Booking>) => Promise<void>;
+  getAvailableInventory: (roomId: string, dateStr: string) => number;
   addAddon: (addon: Omit<Addon, 'id'>) => void;
   updateAddon: (id: string, addon: Partial<Addon>) => void;
   deleteAddon: (id: string) => void;
@@ -387,6 +416,17 @@ export interface HotelContextType {
 }
 
 const HotelContext = createContext<HotelContextType | undefined>(undefined);
+
+export const DEFAULT_GST_SETTINGS: GstSettings = {
+  room_slabs: [
+    { min: 0, max: 1000, rate: 0 },
+    { min: 1001, max: 7500, rate: 5 },
+    { min: 7501, max: 99999999, rate: 18 }
+  ],
+  addons_rate: 18,
+  events_rate: 18,
+  meal_plans_rate: 18
+};
 
 // --- Defaults / Mock Data ---
 
@@ -454,7 +494,8 @@ const defaultHotelInfo: HotelInfo = {
   mealPlanMapChildRate: 750,
   mealPlanApEnabled: true,
   mealPlanApAdultRate: 1500,
-  mealPlanApChildRate: 1250
+  mealPlanApChildRate: 1250,
+  offers: [],
 };
 
 export const defaultRooms: RoomType[] = [
@@ -654,8 +695,10 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [canvasMode, setCanvasMode] = useState<'editor' | 'guest'>('editor');
   const [selectedTheme, setSelectedTheme] = useState<string>('THEME: ORGANIC NATURAL');
   const [propertiesList, setPropertiesList] = useState<PropertyItem[]>([]);
+  const loadedPropertyIdRef = React.useRef<string | null>(null);
 
   const [hotelInfo, setHotelInfoState] = useState<HotelInfo>(defaultHotelInfo);
+  const [gstSettings, setGstSettings] = useState<GstSettings>(DEFAULT_GST_SETTINGS);
 
   const [rooms, setRooms] = useState<RoomType[]>([]);
 
@@ -772,6 +815,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     adults: b.adults ?? 1,
     children: b.children ?? 0,
     selectedSlot: b.selected_slot || undefined,
+    paidAmount: Number(b.paid_amount || 0),
+    refunds: b.refunds ? (typeof b.refunds === 'string' ? JSON.parse(b.refunds) : b.refunds) : [],
   });
 
   const mapDbAddon = (a: any): Addon => ({
@@ -845,6 +890,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     priceChild: Number(e.price_child ?? e.price),
     target: (e.target || 'all') as GuestEvent['target'],
     discount: Number(e.discount ?? 0),
+    aboutText: e.about_text || '',
   });
 
   const mapDbMessage = (m: any): GuestMessage => ({
@@ -942,6 +988,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     customCancellationPolicies: s.custom_cancellation_policies || [],
     paymentCollectionType: s.payment_collection_type,
     paymentCollectionPercent: s.payment_collection_percent,
+    offers: s.offers || [],
+    instagramImages: s.instagram_images || [],
   });
 
   // Helper: build hotel_settings upsert payload from HotelInfo state
@@ -1015,6 +1063,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     payment_collection_type: info.paymentCollectionType || 'partial',
     payment_collection_percent: info.paymentCollectionPercent ?? 50,
     current_template: info.currentTemplate || 'organic',
+    offers: info.offers || [],
+    instagram_images: info.instagramImages || [],
   });
 
   // Helper: build room_categories upsert payload from RoomType
@@ -1048,6 +1098,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const loadAll = async () => {
       const pid = activePropertyId;
       if (!pid) return; // Skip if no property is active
+      loadedPropertyIdRef.current = null; // Mark as not loaded yet to prevent autosave overwrites
       try {
 
         // Step 2: Load all remaining tables in parallel
@@ -1066,6 +1117,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           { data: mediaData },
           { data: messagesData },
           { data: eventLogsData },
+          { data: pricingData },
         ] = await Promise.all([
           supabase.from('hotel_settings').select('*').eq('property_id', pid).single(),
           supabase.from('room_categories').select('*').eq('property_id', pid).order('display_order'),
@@ -1081,7 +1133,30 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           supabase.from('media_library').select('*').eq('property_id', pid).order('display_order'),
           supabase.from('guest_messages').select('*').eq('property_id', pid).order('created_at', { ascending: false }),
           supabase.from('event_logs').select('*').eq('property_id', pid).order('created_at', { ascending: false }).limit(50),
+          supabase.from('pricing_overrides').select('*').eq('property_id', pid),
         ]);
+
+        // Load GST Settings
+        try {
+          const { data: gstData } = await supabase
+            .from('gst_settings')
+            .select('*')
+            .eq('property_id', pid)
+            .maybeSingle();
+          if (gstData) {
+            setGstSettings({
+              room_slabs: gstData.room_slabs || DEFAULT_GST_SETTINGS.room_slabs,
+              addons_rate: Number(gstData.addons_rate) ?? DEFAULT_GST_SETTINGS.addons_rate,
+              events_rate: Number(gstData.events_rate) ?? DEFAULT_GST_SETTINGS.events_rate,
+              meal_plans_rate: Number(gstData.meal_plans_rate) ?? DEFAULT_GST_SETTINGS.meal_plans_rate,
+            });
+          } else {
+            setGstSettings(DEFAULT_GST_SETTINGS);
+          }
+        } catch (err) {
+          console.warn("Could not load gst_settings table, falling back to default slabs:", err);
+          setGstSettings(DEFAULT_GST_SETTINGS);
+        }
 
         // Step 3: Apply loaded data to state
         if (settingsData) {
@@ -1182,6 +1257,27 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } else {
           setEvents([]);
         }
+
+        if (pricingData && pricingData.length > 0) {
+          const mappedPricing: RoomPricing = {};
+          pricingData.forEach((row: any) => {
+            const roomId = row.room_id;
+            const dateStr = row.date;
+            if (!mappedPricing[roomId]) {
+              mappedPricing[roomId] = {};
+            }
+            mappedPricing[roomId][dateStr] = {
+              date: dateStr,
+              price: Number(row.price),
+              isBlocked: row.is_blocked || false
+            };
+          });
+          setPricing(mappedPricing);
+        } else {
+          setPricing({});
+        }
+
+        loadedPropertyIdRef.current = pid; // Mark this property as successfully loaded
       } catch (err) {
         console.warn('[Supabase] Initial load failed, using clean fallback:', err);
       }
@@ -1255,6 +1351,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Debounced sync: whenever hotelInfo changes, upsert hotel_settings after 1.5s idle
   const hotelSyncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Only autosave if the currently active property has finished loading its settings
+    if (!activePropertyId || loadedPropertyIdRef.current !== activePropertyId) {
+      return;
+    }
+
     if (hotelSyncTimer.current) clearTimeout(hotelSyncTimer.current);
     hotelSyncTimer.current = setTimeout(async () => {
       try {
@@ -1270,7 +1371,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, 1500);
     return () => { if (hotelSyncTimer.current) clearTimeout(hotelSyncTimer.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelInfo]);
+  }, [hotelInfo, activePropertyId]);
 
   // Actions
   const addProperty = async (name: string) => {
@@ -1511,6 +1612,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setTestimonials([]);
     }
 
+    loadedPropertyIdRef.current = id; // Initialize the loaded ref for the newly onboarded property
     setActivePropertyId(id);
     addEventLog('Property Created', `Onboarded "${details.name}" via setup wizard.`, 'info');
   };
@@ -1559,12 +1661,10 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateHotelInfo = (info: Partial<HotelInfo>) => {
     // Update local state immediately (debounced Supabase upsert fires via useEffect)
     setHotelInfoState(prev => ({ ...prev, ...info }));
-    setPropertiesList(prev => prev.map(p => p.id === activePropertyId && info.name ? { ...p, name: info.name } : p));
-    // Also sync property name to properties table if name changed
-    if (info.name) {
-      supabase.from('properties').update({ name: info.name })
-        .eq('id', activePropertyId)
-        .then(({ error }: { error: any }) => { if (error) console.warn('[Supabase] updateHotelInfo name sync:', error); });
+    
+    // Only update propertiesList locally if the active property is fully loaded to prevent race conditions during transitions
+    if (info.name && activePropertyId && loadedPropertyIdRef.current === activePropertyId) {
+      setPropertiesList(prev => prev.map(p => p.id === activePropertyId ? { ...p, name: info.name! } : p));
     }
   };
 
@@ -1637,10 +1737,19 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (err) { console.warn('[Supabase] updateDateOverride:', err); }
   };
 
-  const addBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt'>) => {
+  const generateBookingCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `BK-${code}`;
+  };
+
+  const addBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt'>): Promise<string> => {
     const newBooking: Booking = {
       ...bookingData,
-      id: `book-${Date.now()}`,
+      id: generateBookingCode(),
       createdAt: new Date().toISOString()
     };
     setBookings(prev => [newBooking, ...prev]);
@@ -1664,11 +1773,34 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         coupon_code: newBooking.couponCode || null,
         adults: newBooking.adults ?? 1,
         children: newBooking.children ?? 0,
-        selected_slot: newBooking.selectedSlot || null
+        selected_slot: newBooking.selectedSlot || null,
+        paid_amount: newBooking.paidAmount || 0
       });
     } catch (err) {
       console.warn('[Supabase] addBooking error:', err);
     }
+    return newBooking.id;
+  };
+
+  const getAvailableInventory = (roomId: string, dateStr: string): number => {
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return 0;
+    
+    // Base inventory configuration (default or daily override)
+    const baseInventory = room.inventory_overrides?.[dateStr] ?? room.totalInventory;
+    
+    // Count active overlapping bookings
+    const bookingsOnDate = bookings.filter(b => {
+      return b.bookingStatus !== 'cancelled' &&
+             b.checkIn <= dateStr &&
+             b.checkOut > dateStr;
+    }).reduce((sum, b) => {
+      const roomIds = b.roomId ? b.roomId.split(',') : [];
+      const count = roomIds.filter(id => id === roomId).length;
+      return sum + count;
+    }, 0);
+
+    return Math.max(0, baseInventory - bookingsOnDate);
   };
 
   const cancelBooking = async (id: string) => {
@@ -1681,6 +1813,28 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .eq('property_id', activePropertyId);
     } catch (err) {
       console.warn('[Supabase] cancelBooking error:', err);
+    }
+  };
+
+  const updateBooking = async (id: string, updates: Partial<Booking>) => {
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+    try {
+      const payload: any = {};
+      if (updates.checkIn !== undefined) payload.check_in = updates.checkIn;
+      if (updates.checkOut !== undefined) payload.check_out = updates.checkOut;
+      if (updates.totalPrice !== undefined) payload.total_price = updates.totalPrice;
+      if (updates.paymentStatus !== undefined) payload.payment_status = updates.paymentStatus;
+      if (updates.bookingStatus !== undefined) payload.booking_status = updates.bookingStatus;
+      if (updates.paidAmount !== undefined) payload.paid_amount = updates.paidAmount;
+      if (updates.refunds !== undefined) payload.refunds = updates.refunds;
+
+      await supabase
+        .from('bookings')
+        .update(payload)
+        .eq('id', id)
+        .eq('property_id', activePropertyId);
+    } catch (err) {
+      console.warn('[Supabase] updateBooking error:', err);
     }
   };
 
@@ -1866,7 +2020,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         price_adult: evt.priceAdult || 0,
         price_child: evt.priceChild || 0,
         target: evt.target || 'all',
-        discount: evt.discount || 0
+        discount: evt.discount || 0,
+        about_text: evt.aboutText || ''
       });
     } catch (err) { console.warn('[Supabase] addGuestEvent:', err); }
   };
@@ -1874,7 +2029,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateGuestEvent = async (id: string, evtData: Partial<GuestEvent>) => {
     setGuestEvents(prev => prev.map(e => e.id === id ? { ...e, ...evtData } : e));
     try {
-      await supabase.from('guest_events').update({
+      const payload: any = {
         title: evtData.title, category: evtData.category, description: evtData.description,
         image: evtData.image, from_date: evtData.fromDate, to_date: evtData.toDate,
         time: evtData.time, price: evtData.price, capacity: evtData.capacity,
@@ -1883,7 +2038,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         price_child: evtData.priceChild,
         target: evtData.target,
         discount: evtData.discount
-      }).eq('id', id).eq('property_id', activePropertyId);
+      };
+      if (evtData.aboutText !== undefined) {
+        payload.about_text = evtData.aboutText;
+      }
+      await supabase.from('guest_events').update(payload).eq('id', id).eq('property_id', activePropertyId);
     } catch (err) { console.warn('[Supabase] updateGuestEvent:', err); }
   };
 
@@ -1914,6 +2073,44 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTemplateState(template);
   };
 
+  const updateGstSettings = async (updates: Partial<GstSettings>) => {
+    if (!activePropertyId) return;
+    const next = { ...gstSettings, ...updates };
+    setGstSettings(next);
+    try {
+      const { data } = await supabase
+        .from('gst_settings')
+        .select('id')
+        .eq('property_id', activePropertyId)
+        .maybeSingle();
+
+      if (data?.id) {
+        await supabase
+          .from('gst_settings')
+          .update({
+            room_slabs: next.room_slabs,
+            addons_rate: next.addons_rate,
+            events_rate: next.events_rate,
+            meal_plans_rate: next.meal_plans_rate,
+            updated_at: new Date().toISOString()
+          })
+          .eq('property_id', activePropertyId);
+      } else {
+        await supabase
+          .from('gst_settings')
+          .insert({
+            property_id: activePropertyId,
+            room_slabs: next.room_slabs,
+            addons_rate: next.addons_rate,
+            events_rate: next.events_rate,
+            meal_plans_rate: next.meal_plans_rate
+          });
+      }
+    } catch (err) {
+      console.warn("Failed to save GST settings:", err);
+    }
+  };
+
   const addEventLog = async (title: string, description: string, type: 'booking' | 'channel' | 'info') => {
     const id = `evt-${Date.now()}`;
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -1942,6 +2139,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       publishProperty,
 
       hotelInfo,
+      gstSettings,
+      updateGstSettings,
       rooms,
       pricing,
       bookings,
@@ -1972,6 +2171,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updateDateOverride,
       addBooking,
       cancelBooking,
+      updateBooking,
+      getAvailableInventory,
       addAddon,
       updateAddon,
       deleteAddon,
