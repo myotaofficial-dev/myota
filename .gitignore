@@ -29,3 +29,12 @@ dist-ssr
 design-skill.md
 *.md
 !README.md
+
+# Local env files
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+

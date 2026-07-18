@@ -21,8 +21,9 @@ interface BentoGalleryProps {
 
 export const BentoGallery: React.FC<BentoGalleryProps> = ({ images, scrollContainerRef, onImageClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const [scrollerNode, setScrollerNode] = useState<HTMLDivElement | null>(null);
+  const dynamicScrollerRef = useRef<HTMLDivElement | null>(null);
+  dynamicScrollerRef.current = scrollerNode;
 
   // Combine custom images with default ones if there are fewer than 8
   const displayImages = React.useMemo(() => {
@@ -39,20 +40,18 @@ export const BentoGallery: React.FC<BentoGalleryProps> = ({ images, scrollContai
   // Find scrollable parent container dynamically on mount if not provided as prop
   useEffect(() => {
     if (scrollContainerRef?.current) {
-      scrollerRef.current = scrollContainerRef.current;
-      setScroller(scrollContainerRef.current);
+      setScrollerNode(scrollContainerRef.current);
     } else if (containerRef.current) {
       const el = containerRef.current.closest('.overflow-y-auto') as HTMLDivElement;
       if (el) {
-        scrollerRef.current = el;
-        setScroller(el);
+        setScrollerNode(el);
       }
     }
-  }, [scrollContainerRef]);
+  }, [scrollContainerRef, scrollContainerRef?.current]);
 
   // Track scroll progress of the container relative to the resolved scroll container
   const { scrollYProgress } = useScroll({
-    container: scroller ? scrollerRef : undefined,
+    container: scrollerNode ? dynamicScrollerRef : undefined,
     target: containerRef,
     offset: ['start start', 'end end']
   });

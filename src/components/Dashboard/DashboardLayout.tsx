@@ -28,7 +28,8 @@ export const DashboardLayout: React.FC = () => {
   const {
     selectedView, setAppMode, activePropertyId, setActivePropertyId,
     propertiesList, selectedTheme, setSelectedTheme, canvasMode, setCanvasMode,
-    previewDevice, setPreviewDevice, publishProperty, editorFocus, setEditorFocus
+    previewDevice, setPreviewDevice, publishProperty, editorFocus, setEditorFocus,
+    hotelInfo
   } = useHotel();
 
   const [publishSuccess, setPublishSuccess] = useState(false);
@@ -172,14 +173,14 @@ export const DashboardLayout: React.FC = () => {
           ) : (
             /* Guest Mode Preview Toggle */
             <button
-              onClick={() => setCanvasMode(isGuestMode ? 'editor' : 'guest')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${isGuestMode
-                  ? 'bg-[#1C1917] text-white border-[#1C1917]'
-                  : 'bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]'
-                }`}
+              onClick={() => {
+                const sub = hotelInfo?.subdomain || 'grandlake';
+                window.open(`/?preview=${sub}`, '_blank');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>{isGuestMode ? 'Exit Preview' : 'Preview'}</span>
+              <span>Preview</span>
             </button>
           )}
 

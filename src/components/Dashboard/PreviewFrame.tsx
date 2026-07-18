@@ -46,7 +46,7 @@ export const PreviewFrame: React.FC = () => {
           )}
           
           {/* Inner content scroll frame */}
-          <div className="w-full h-full flex flex-col overflow-hidden pt-0.5">
+          <div className="w-full h-full flex flex-col overflow-hidden pt-0">
             {renderActiveTemplate()}
           </div>
         </div>

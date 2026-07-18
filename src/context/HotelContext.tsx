@@ -692,7 +692,15 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activePropertyId, setActivePropertyId] = useState<string>(() => {
     return localStorage.getItem('activePropertyId') || '';
   });
-  const [canvasMode, setCanvasMode] = useState<'editor' | 'guest'>('editor');
+  const [canvasMode, setCanvasMode] = useState<'editor' | 'guest'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const previewSub = params.get('preview');
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const parts = hostname.split('.');
+    const hasSubdomain = !isLocalhost && parts.length > 2 && parts[0] !== 'www';
+    return (previewSub || hasSubdomain) ? 'guest' : 'editor';
+  });
   const [selectedTheme, setSelectedTheme] = useState<string>('THEME: ORGANIC NATURAL');
   const [propertiesList, setPropertiesList] = useState<PropertyItem[]>([]);
   const loadedPropertyIdRef = React.useRef<string | null>(null);
@@ -1091,6 +1099,38 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     cancellation_policy_overrides: room.cancellation_policy_overrides || {},
     is_active: room.is_active ?? true,
   });
+
+  // Load property by preview query parameter or subdomain on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let previewSub = params.get('preview');
+
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const parts = hostname.split('.');
+    if (!isLocalhost && parts.length > 2 && parts[0] !== 'www') {
+      previewSub = parts[0];
+    }
+
+    if (previewSub) {
+      const loadPreviewProperty = async () => {
+        try {
+          const { data } = await supabase
+            .from('hotel_settings')
+            .select('property_id')
+            .eq('subdomain', previewSub)
+            .maybeSingle();
+
+          if (data && data.property_id) {
+            setActivePropertyId(data.property_id);
+          }
+        } catch (err) {
+          console.warn('Failed to load preview property by subdomain:', err);
+        }
+      };
+      loadPreviewProperty();
+    }
+  }, []);
 
   // Load all data from Supabase on mount (parallel fetch)
   // Also seeds properties + hotel_settings + rooms if first time

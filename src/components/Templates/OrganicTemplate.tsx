@@ -313,6 +313,30 @@ export const OrganicTemplate: React.FC = () => {
   // Booking Widget States
   const [checkIn, setCheckIn] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [checkOut, setCheckOut] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+
+  const handleCheckInChange = (newVal: string) => {
+    setCheckIn(newVal);
+    const start = new Date(newVal);
+    const end = new Date(checkOut);
+    if (!isNaN(start.getTime())) {
+      if (isNaN(end.getTime()) || end <= start) {
+        const nextDay = addDays(start, 1);
+        setCheckOut(format(nextDay, 'yyyy-MM-dd'));
+      }
+    }
+  };
+
+  const handleCheckOutChange = (newVal: string) => {
+    setCheckOut(newVal);
+    const start = new Date(checkIn);
+    const end = new Date(newVal);
+    if (!isNaN(end.getTime())) {
+      if (isNaN(start.getTime()) || end <= start) {
+        const prevDay = addDays(end, -1);
+        setCheckIn(format(prevDay, 'yyyy-MM-dd'));
+      }
+    }
+  };
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '');
   const [promoCode, setPromoCode] = useState('');
 
@@ -403,9 +427,21 @@ export const OrganicTemplate: React.FC = () => {
     }
   }, [hotelInfo.defaultMealPlan, hotelInfo.mealPlanCpEnabled]);
 
-  const currentSelectedRooms = selectedRoomsList.length > 0 
-    ? selectedRoomsList 
-    : (rooms.find(r => r.id === selectedRoomId) ? [rooms.find(r => r.id === selectedRoomId)!] : []);
+  const currentSelectedRooms = selectedRoomsList;
+
+  useEffect(() => {
+    if (isBookingOpen) {
+      if (selectedRoomsList.length === 0 && selectedRoomId) {
+        const r = rooms.find(room => room.id === selectedRoomId);
+        if (r) {
+          setSelectedRoomsList([r]);
+        }
+      }
+    } else {
+      setSelectedRoomsList([]);
+    }
+  }, [isBookingOpen, selectedRoomId, rooms]);
+
   const selectedEvent = guestEvents.find(e => e.id === selectedEventId);
 
   const formatTime12h = (time24: string) => {
@@ -1206,7 +1242,7 @@ export const OrganicTemplate: React.FC = () => {
       <section
         key="hero"
         onClick={(e) => triggerEdit('hero', e)}
-        className={`relative h-[80vh] shrink-0 overflow-hidden flex items-end justify-start text-left px-6 sm:px-12 pb-16 sm:pb-20 pt-28 group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-[-2px]' : ''
+        className={`relative h-[100dvh] shrink-0 overflow-hidden flex items-end justify-start text-left px-6 sm:px-12 pb-16 sm:pb-20 pt-28 group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-[-2px]' : ''
           }`}
       >
         {canvasMode === 'editor' && (
@@ -2159,9 +2195,9 @@ export const OrganicTemplate: React.FC = () => {
     >
       <div className="bg-[#FAF6F0] relative z-10 shadow-2xl">
         {/* 1. HEADER (LOGO + MENU BAR) — TRANS-OVERLAY */}
-        <nav className={`px-5 lg:px-8 py-3.5 flex items-center justify-between transition-all duration-500 ease-in-out z-30 sticky top-0 left-0 right-0 w-full mb-[-58px] ${isScrolled
-          ? 'bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]'
-          : 'bg-transparent border-b border-white/10'
+        <nav className={`px-5 lg:px-8 py-3.5 flex items-center justify-between transition-all duration-500 ease-in-out z-30 w-full ${isScrolled
+          ? 'sticky top-0 bg-[#FAF6F0]/75 backdrop-blur-lg border-b border-[#D8E2DC]/70 shadow-[0_4px_30px_rgba(61,64,43,0.05)]'
+          : 'absolute top-0 left-0 right-0 bg-transparent border-b border-white/10'
           }`}>
 
           {/* Logo */}
@@ -2901,7 +2937,7 @@ export const OrganicTemplate: React.FC = () => {
                           <input
                             type="date"
                             value={checkIn}
-                            onChange={(e) => setCheckIn(e.target.value)}
+                            onChange={(e) => handleCheckInChange(e.target.value)}
                             onClick={(e) => {
                               try {
                                 e.currentTarget.showPicker();
@@ -2919,7 +2955,7 @@ export const OrganicTemplate: React.FC = () => {
                           <input
                             type="date"
                             value={checkOut}
-                            onChange={(e) => setCheckOut(e.target.value)}
+                            onChange={(e) => handleCheckOutChange(e.target.value)}
                             onClick={(e) => {
                               try {
                                 e.currentTarget.showPicker();
@@ -3102,8 +3138,17 @@ export const OrganicTemplate: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Divider */}
+                      {recommendations.length > 0 && (
+                        <div className="flex items-center justify-center my-4.5">
+                          <div className="h-px bg-zinc-200 flex-1"></div>
+                          <span className="px-3 text-[10px] font-black uppercase text-zinc-400 tracking-widest bg-[#FAF6F0] border border-zinc-250/70 rounded-full py-0.5 select-none">OR</span>
+                          <div className="h-px bg-zinc-200 flex-1"></div>
+                        </div>
+                      )}
+
                       {/* Custom Combo Builder (Make Your Own Combo) */}
-                      <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3 text-left">
+                      <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3 text-left animate-in fade-in duration-300">
                         <div>
                           <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Make Your Own Combo</span>
                           <p className="text-xs text-zinc-500 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
@@ -3116,11 +3161,21 @@ export const OrganicTemplate: React.FC = () => {
                           }).map(room => {
                             const count = currentSelectedRooms.filter(r => r.id === room.id).length;
                             return (
-                              <div key={room.id} className="flex items-center justify-between py-1.5 border-b border-zinc-50 last:border-0">
-                                <div>
-                                  <span className="font-extrabold text-[#3D405B] text-xs block uppercase">{room.name}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[9px] text-[#E07A5F] font-semibold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                              <div key={room.id} className="flex gap-3 items-center py-2.5 border-b border-zinc-50 last:border-0">
+                                {/* Thumbnail Image */}
+                                <div className="w-16 h-12 shrink-0 rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50">
+                                  {room.photos && room.photos[0] ? (
+                                    <img src={room.photos[0]} alt={room.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400 font-bold bg-zinc-100">NO IMG</div>
+                                  )}
+                                </div>
+
+                                {/* Room Info */}
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-extrabold text-[#3D405B] text-xs block uppercase truncate leading-tight">{room.name}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                    <span className="text-[9.5px] text-[#E07A5F] font-bold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
                                     {(() => {
                                       const avail = getMinAvailableInventoryDuringStay(room.id);
                                       const minOcc = room.min_occupancy || 1;
@@ -3139,8 +3194,24 @@ export const OrganicTemplate: React.FC = () => {
                                       );
                                     })()}
                                   </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPopoverCombo({
+                                      rooms: [room],
+                                      label: room.name,
+                                      description: room.description,
+                                      price: room.basePrice,
+                                      originalPrice: room.basePrice,
+                                      type: 'single'
+                                    })}
+                                    className="text-[9.5px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-0.5 block cursor-pointer"
+                                  >
+                                    Know More
+                                  </button>
                                 </div>
-                                <div className="flex items-center gap-2">
+
+                                {/* Count Controls */}
+                                <div className="flex items-center gap-2 shrink-0">
                                   <button
                                     type="button"
                                     onClick={() => {
