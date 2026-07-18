@@ -4,7 +4,7 @@ import {
   Plus, Calendar, DollarSign, CheckCircle2, Clock, Wallet, Users,
   BarChart3, LayoutDashboard, CalendarRange, Link, CalendarOff, LogOut,
   ChevronRight, ArrowLeft, Layers, Home, MapPin, Star, AlertCircle,
-  Check, Loader2, Globe, Trash2
+  Check, Loader2, Globe, Trash2, Menu, X
 } from 'lucide-react';
 import { searchPlaces, getPlaceDetails, type PlaceCandidate, type PlaceDetails } from '../../services/PlacesService';
 import { supabase } from '../../lib/supabaseClient';
@@ -167,6 +167,7 @@ export const PlatformDashboard: React.FC = () => {
   const [chartPeriod, setChartPeriod] = useState<'lifetime' | '30days' | 'month' | 'lastmonth'>('lifetime');
 
   const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'bookings' | 'payment-links' | 'pricing-calendar'>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // INR formatter
   const formatRupees = (val: number) =>
@@ -367,8 +368,8 @@ export const PlatformDashboard: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden text-[#1C1917]" style={{ background: 'var(--ds-bg)' }}>
 
-      {/* ── Left Sidebar ──────────────────────────────────────────── */}
-      <aside className="w-64 bg-white border-r flex flex-col h-full shrink-0" style={{ borderColor: 'var(--ds-border)' }}>
+      {/* ── Left Sidebar (Desktop Inline) ──────────────────────────── */}
+      <aside className="hidden lg:flex w-64 bg-white border-r flex flex-col h-full shrink-0" style={{ borderColor: 'var(--ds-border)' }}>
         {/* Brand */}
         <div className="p-6 border-b flex items-center gap-3" style={{ borderColor: 'var(--ds-border)' }}>
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md" style={{ background: 'var(--ds-primary)' }}>
@@ -475,118 +476,281 @@ export const PlatformDashboard: React.FC = () => {
         </div>
       </aside>
 
-      {/* ── Main Content ───────────────────────────────────────────── */}
-      {activeMainTab === 'bookings' ? (
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
-          <BookingsView />
-        </main>
-      ) : activeMainTab === 'payment-links' ? (
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
-          <PaymentLinksView />
-        </main>
-      ) : activeMainTab === 'pricing-calendar' ? (
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-[#FAFAF9]/40">
-          <PricingCalendarView />
-        </main>
-      ) : propertiesList.length === 0 ? (
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col justify-center items-center text-center space-y-6">
-          <div className="max-w-md space-y-5">
-            <div className="w-16 h-16 rounded-2xl bg-[#1B93A4]/10 text-[#1B93A4] flex items-center justify-center mx-auto shadow-xs">
-              <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
-                <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
-              </svg>
+      {/* ── Mobile Sidebar Overlay Backdrop ──────────────────────────────── */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile Sidebar Drawer ────────────────────────────────────────── */}
+      <aside 
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white border-r flex flex-col h-full transition-transform duration-300 ease-in-out transform ${
+          isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        style={{ borderColor: 'var(--ds-border)' }}
+      >
+        {/* Brand with close button */}
+        <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: 'var(--ds-border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md" style={{ background: 'var(--ds-primary)' }}>
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M19 11h-6V3l-7 10h6v8l7-10z" /></svg>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>
-                Welcome, {firstName}!
-              </h2>
-              <p className="text-sm text-[#78716C] leading-relaxed max-w-sm mx-auto">
-                Let's launch your hotel, resort, or homestay's digital storefront. Create your first property to get started.
-              </p>
+            <div>
+              <h1 className="font-extrabold text-base leading-none" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>MyOTA</h1>
+              <span className="ds-overline block mt-1">Hospitality Suite</span>
             </div>
+          </div>
+          <button 
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition cursor-pointer border"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Nav */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <ul className="space-y-0.5">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'bookings', label: 'Bookings', icon: Calendar },
+              { id: 'analytics', label: 'Analytics', icon: BarChart3, disabled: true },
+              { id: 'pricing-calendar', label: 'Pricing & Calendar', icon: CalendarRange, disabled: false },
+              { id: 'payment-links', label: 'Payment Links', icon: Link, disabled: false },
+              { id: 'missed-bookings', label: 'Missed Bookings', icon: CalendarOff, disabled: true },
+            ].map(({ id, label, icon: Icon, disabled }) => {
+              const active = activeMainTab === id;
+              return (
+                <li key={id}>
+                  <button 
+                    disabled={disabled}
+                    onClick={() => {
+                      if (!disabled) {
+                        setActiveMainTab(id as any);
+                        setIsMobileSidebarOpen(false);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      disabled ? 'opacity-50 cursor-not-allowed' : active ? 'font-bold' : 'hover:bg-[#FAFAF9] cursor-pointer'
+                    }`}
+                    style={active ? { background: 'var(--ds-primary-subtle)', color: 'var(--ds-primary)' } : { color: 'var(--ds-text-secondary)' }}
+                  >
+                    <Icon className="w-4 h-4" style={{ color: active ? 'var(--ds-primary)' : 'var(--ds-text-muted)' }} />
+                    <span>{label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Properties */}
+          <div className="space-y-2">
+            <h3 className="ds-overline px-3">Properties</h3>
+            <ul className="space-y-1">
+              {propertiesList.map(prop => (
+                <li key={prop.id} className="relative group">
+                  <div className="flex items-center justify-between w-full rounded-xl hover:bg-[#FAFAF9] transition">
+                    <button
+                      onClick={() => {
+                        handleSelectProperty(prop.id, prop.name);
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className="flex-1 flex items-center justify-between px-3.5 py-2 text-left truncate cursor-pointer"
+                    >
+                      <span className="text-xs font-semibold truncate max-w-[110px]" style={{ color: 'var(--ds-text-primary)' }}>{prop.name}</span>
+                      <span className="ds-badge ds-badge-teal uppercase shrink-0 text-[9px] px-1.5 py-0.5">{prop.status}</span>
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPropertyToDelete({ id: prop.id, name: prop.name });
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className="p-1.5 text-zinc-400 hover:text-red-650 rounded-lg transition mr-1 cursor-pointer shrink-0"
+                      title={`Delete ${prop.name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
             <button
-              onClick={openOnboarding}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-[#1C1917] hover:bg-zinc-800 text-white rounded-xl font-bold text-xs tracking-wider uppercase transition shadow-md cursor-pointer"
+              onClick={() => {
+                openOnboarding();
+                setIsMobileSidebarOpen(false);
+              }}
+              className="w-full border border-dashed rounded-xl px-3.5 py-2.5 flex items-center justify-center gap-1.5 text-xs font-bold transition hover:bg-white"
+              style={{ borderColor: 'var(--ds-border)', color: 'var(--ds-text-secondary)' }}
             >
-              <Plus className="w-4 h-4" /> Create Your First Property
+              <Plus className="w-4 h-4" />
+              <span>Add Property</span>
             </button>
           </div>
-        </main>
-      ) : (
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
-          <div>
-            <h2 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Morning, {firstName}</h2>
-            <p className="text-sm mt-1 font-medium" style={{ color: 'var(--ds-text-secondary)' }}>See your bookings, visitors, and revenue at a glance</p>
-          </div>
+        </div>
 
-          {/* Stat Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {statCards.map(({ label, value, badge, icon: Icon, iconBg, iconColor }) => (
-              <div key={label} className="bg-white p-5 rounded-2xl border relative flex flex-col justify-between h-32" style={{ borderColor: 'var(--ds-border)' }}>
-                <div>
-                  <span className="ds-overline block">{label}</span>
-                  <p className="text-2xl font-black mt-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>{value}</p>
-                </div>
-                <span className="ds-badge ds-badge-teal w-max">{badge}</span>
-                <div className="absolute top-5 right-5 p-2 rounded-full" style={{ background: iconBg, color: iconColor }}>
-                  <Icon className="w-4 h-4" />
-                </div>
-              </div>
-            ))}
+        {/* Footer */}
+        <div className="p-4 border-t flex items-center justify-between" style={{ borderColor: 'var(--ds-border)', background: '#FAFAF9' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'var(--ds-primary)' }}>
+              {initials}
+            </div>
+            <div>
+              <h4 className="font-bold text-xs leading-none" style={{ color: 'var(--ds-text-primary)' }}>{userName}</h4>
+              <span className="text-[10px] font-semibold block mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Manager Account</span>
+            </div>
           </div>
+          <button
+            onClick={() => {
+              handleLogout();
+              setIsMobileSidebarOpen(false);
+            }}
+            className="transition hover:text-red-500 cursor-pointer"
+            style={{ color: 'var(--ds-text-muted)' }}
+            title="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </aside>
 
-          {/* Chart Panel */}
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-            <div className="xl:col-span-3 bg-white p-6 rounded-2xl border space-y-6" style={{ borderColor: 'var(--ds-border)' }}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-extrabold" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Bookings and revenue over time</h3>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Track room demand, revenue movement, and conversions.</p>
-                </div>
-                <div className="flex p-0.5 rounded-lg border" style={{ background: '#F5F5F4', borderColor: 'var(--ds-border)' }}>
-                  {(['lifetime', '30days', 'month', 'lastmonth'] as const).map(p => (
-                    <button key={p} onClick={() => setChartPeriod(p)}
-                      className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition ${chartPeriod === p ? 'bg-[#1C1917] text-white shadow-sm' : 'text-[#78716C] hover:text-[#1C1917]'}`}>
-                      {p === 'lifetime' ? 'Lifetime' : p === '30days' ? '30 Days' : p === 'month' ? 'This Month' : 'Last Month'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="h-56 relative rounded-xl overflow-hidden flex flex-col justify-between p-4" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
-                <div className="absolute left-4 top-4 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹40,000</div>
-                <div className="absolute left-4 top-24 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹20,000</div>
-                <div className="absolute left-4 bottom-14 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹0</div>
-                <div className="w-full h-full flex flex-col justify-between pointer-events-none absolute inset-0 py-8 px-12 opacity-40">
-                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-                  <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
-                </div>
-                <svg className="w-full h-full absolute inset-0 px-12 py-8 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#1B93A4" stopOpacity="0.15" />
-                      <stop offset="100%" stopColor="#1B93A4" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50 L 100,100 L 0,100 Z" fill="url(#chartGradient)" />
-                  <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50" fill="none" stroke="#1B93A4" strokeWidth="2.5" strokeLinecap="round" />
+      {/* ── Main Content Area Wrapper ───────────────────────────────── */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Mobile Header Bar */}
+        <header className="lg:hidden bg-white border-b border-zinc-200 h-14 px-4 flex items-center justify-between shrink-0 select-none w-full z-30">
+          <button 
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="p-1.5 hover:bg-zinc-50 rounded-lg text-zinc-600 border border-zinc-200"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-6.5 h-6.5 rounded-lg flex items-center justify-center text-white" style={{ background: 'var(--ds-primary)' }}>
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 11h-6V3l-7 10h6v8l7-10z" /></svg>
+            </div>
+            <span className="font-black text-xs tracking-tight text-zinc-900" style={{ fontFamily: 'Outfit, sans-serif' }}>MyOTA</span>
+          </div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white" style={{ background: 'var(--ds-primary)' }}>
+            {initials}
+          </div>
+        </header>
+
+        {/* Views Router */}
+        {activeMainTab === 'bookings' ? (
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+            <BookingsView />
+          </main>
+        ) : activeMainTab === 'payment-links' ? (
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+            <PaymentLinksView />
+          </main>
+        ) : activeMainTab === 'pricing-calendar' ? (
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 bg-[#FAFAF9]/40">
+            <PricingCalendarView />
+          </main>
+        ) : propertiesList.length === 0 ? (
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col justify-center items-center text-center space-y-6">
+            <div className="max-w-md space-y-5">
+              <div className="w-16 h-16 rounded-2xl bg-[#1B93A4]/10 text-[#1B93A4] flex items-center justify-center mx-auto shadow-xs">
+                <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
                 </svg>
-                <div className="mt-auto w-full flex justify-between text-[10px] font-bold px-8 z-10 pt-4 border-t bg-white" style={{ color: 'var(--ds-text-muted)', borderColor: 'var(--ds-border)' }}>
-                  {['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'].map(m => <span key={m}>{m}</span>)}
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-3xl font-black tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>
+                  Welcome, {firstName}!
+                </h2>
+                <p className="text-sm text-[#78716C] leading-relaxed max-w-sm mx-auto">
+                  Let's launch your hotel, resort, or homestay's digital storefront. Create your first property to get started.
+                </p>
+              </div>
+              <button
+                onClick={openOnboarding}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#1C1917] hover:bg-zinc-800 text-white rounded-xl font-bold text-xs tracking-wider uppercase transition shadow-md cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Create Your First Property
+              </button>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
+            <div>
+              <h2 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Morning, {firstName}</h2>
+              <p className="text-sm mt-1 font-medium" style={{ color: 'var(--ds-text-secondary)' }}>See your bookings, visitors, and revenue at a glance</p>
+            </div>
+
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {statCards.map(({ label, value, badge, icon: Icon, iconBg, iconColor }) => (
+                <div key={label} className="bg-white p-4 sm:p-5 rounded-2xl border relative flex flex-col justify-between h-32" style={{ borderColor: 'var(--ds-border)' }}>
+                  <div>
+                    <span className="ds-overline block">{label}</span>
+                    <p className="text-xl sm:text-2xl font-black mt-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>{value}</p>
+                  </div>
+                  <span className="ds-badge ds-badge-teal w-max">{badge}</span>
+                  <div className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 rounded-full" style={{ background: iconBg, color: iconColor }}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Chart Panel */}
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+              <div className="xl:col-span-3 bg-white p-6 rounded-2xl border space-y-6" style={{ borderColor: 'var(--ds-border)' }}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-extrabold" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>Bookings and revenue over time</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ds-text-muted)' }}>Track room demand, revenue movement, and conversions.</p>
+                  </div>
+                  <div className="flex p-0.5 rounded-lg border overflow-x-auto" style={{ background: '#F5F5F4', borderColor: 'var(--ds-border)' }}>
+                    {(['lifetime', '30days', 'month', 'lastmonth'] as const).map(p => (
+                      <button key={p} onClick={() => setChartPeriod(p)}
+                        className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition ${chartPeriod === p ? 'bg-[#1C1917] text-white shadow-sm' : 'text-[#78716C] hover:text-[#1C1917]'} whitespace-nowrap`}>
+                        {p === 'lifetime' ? 'Lifetime' : p === '30days' ? '30 Days' : p === 'month' ? 'This Month' : 'Last Month'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-56 relative rounded-xl overflow-hidden flex flex-col justify-between p-4" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
+                  <div className="absolute left-4 top-4 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹40,000</div>
+                  <div className="absolute left-4 top-24 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹20,000</div>
+                  <div className="absolute left-4 bottom-14 text-[10px] font-semibold" style={{ color: 'var(--ds-text-muted)' }}>₹0</div>
+                  <div className="w-full h-full flex flex-col justify-between pointer-events-none absolute inset-0 py-8 px-12 opacity-40">
+                    <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                    <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                    <div className="border-t border-dashed w-full" style={{ borderColor: 'var(--ds-border)' }} />
+                  </div>
+                  <svg className="w-full h-full absolute inset-0 px-12 py-8 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1B93A4" stopOpacity="0.15" />
+                        <stop offset="100%" stopColor="#1B93A4" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50 L 100,100 L 0,100 Z" fill="url(#chartGradient)" />
+                    <path d="M 0,80 Q 20,40 40,65 T 80,30 T 100,50" fill="none" stroke="#1B93A4" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                  <div className="mt-auto w-full flex justify-between text-[10px] font-bold px-8 z-10 pt-4 border-t bg-white" style={{ color: 'var(--ds-text-muted)', borderColor: 'var(--ds-border)' }}>
+                    {['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'].map(m => <span key={m}>{m}</span>)}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border flex flex-col justify-between min-h-[250px]" style={{ borderColor: 'var(--ds-border)' }}>
-              <div>
-                <span className="ds-overline block">Total Visitors</span>
-                <h4 className="text-5xl font-black mt-4" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>29</h4>
-                <p className="text-xs mt-2 font-medium" style={{ color: 'var(--ds-text-muted)' }}>Unique views across platform sites.</p>
+              <div className="bg-white p-6 rounded-2xl border flex flex-col justify-between min-h-[200px]" style={{ borderColor: 'var(--ds-border)' }}>
+                <div>
+                  <span className="ds-overline block">Total Visitors</span>
+                  <h4 className="text-5xl font-black mt-4" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--ds-text-primary)' }}>29</h4>
+                  <p className="text-xs mt-2 font-medium" style={{ color: 'var(--ds-text-muted)' }}>Unique views across platform sites.</p>
+                </div>
+                <span className="ds-badge ds-badge-teal w-max flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Lifetime Total</span>
               </div>
-              <span className="ds-badge ds-badge-teal w-max flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Lifetime Total</span>
             </div>
-          </div>
-        </main>
-      )}
+          </main>
+        )}
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════
           FULL-PAGE ONBOARDING OVERLAY

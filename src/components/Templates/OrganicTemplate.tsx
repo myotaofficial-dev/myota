@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import { CustomPageRenderer } from './CustomPageRenderer';
 import { BentoGallery } from '../ui/bento-gallery';
@@ -417,6 +417,190 @@ export const OrganicTemplate: React.FC = () => {
   const [childrenAges, setChildrenAges] = useState<number[]>([]);
   const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
   const [selectedMealPlan, setSelectedMealPlan] = useState<'ep' | 'cp' | 'map' | 'ap'>('ep');
+
+  const [activeSelectionTab, setActiveSelectionTab] = useState<'smart' | 'custom'>('smart');
+  const [roomAdultsCount, setRoomAdultsCount] = useState<Record<string, number>>({});
+  const [roomKidsCount, setRoomKidsCount] = useState<Record<string, number>>({});
+  const [roomKidsAges, setRoomKidsAges] = useState<Record<string, number[]>>({});
+
+  const stayNights = differenceInDays(new Date(checkOut), new Date(checkIn)) || 0;
+
+  // Generate stay dates list
+  const stayDatesList = useMemo(() => {
+    if (!checkIn || !checkOut || stayNights <= 0) return [];
+    try {
+      const start = new Date(checkIn);
+      return Array.from({ length: stayNights }, (_, i) => {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        return {
+          dateStr: format(d, 'yyyy-MM-dd'),
+          displayStr: format(d, 'dd.MM.yy')
+        };
+      });
+    } catch {
+      return [];
+    }
+  }, [checkIn, checkOut, stayNights]);
+
+  // Check inventory status for all room categories across select stay dates
+  const roomInventoryStatuses = useMemo(() => {
+    const statusMap: Record<string, { selectable: boolean; datesInfo: { dateStr: string; displayStr: string; avail: number }[] }> = {};
+    
+    rooms.forEach(r => {
+      let selectable = true;
+      const datesInfo = stayDatesList.map((item: any) => {
+        const avail = getAvailableInventory(r.id, item.dateStr);
+        if (avail <= 0) {
+          selectable = false;
+        }
+        return {
+          dateStr: item.dateStr,
+          displayStr: item.displayStr,
+          avail
+        };
+      });
+      statusMap[r.id] = { selectable, datesInfo };
+    });
+
+    return statusMap;
+  }, [rooms, stayDatesList, getAvailableInventory]);
+
+  // Automatically sync childrenAges whenever childrenCount changes
+  useEffect(() => {
+    setChildrenAges(prev => {
+      const next = [...prev];
+      if (childrenCount > next.length) {
+        for (let i = next.length; i < childrenCount; i++) {
+          next.push(8);
+        }
+      }
+      return next.slice(0, childrenCount);
+    });
+  }, [childrenCount]);
+
+  // Calculate adultsCount and childrenCount dynamically when activeSelectionTab is 'custom'
+  useEffect(() => {
+    if (activeSelectionTab === 'custom') {
+      let totalAdults = 0;
+      let totalKids = 0;
+      const allKidsAges: number[] = [];
+      rooms.forEach(r => {
+        const qty = selectedRoomsList.filter(x => x.id === r.id).length;
+        if (qty > 0) {
+          totalAdults += roomAdultsCount[r.id] || (qty * 2);
+          const kids = roomKidsCount[r.id] || 0;
+          totalKids += kids;
+          const ages = roomKidsAges[r.id] || Array(kids).fill(8);
+          allKidsAges.push(...ages);
+        }
+      });
+      setAdultsCount(Math.max(1, totalAdults));
+      setChildrenCount(totalKids);
+      setChildrenAges(allKidsAges);
+    }
+  }, [activeSelectionTab, roomAdultsCount, roomKidsCount, roomKidsAges, selectedRoomsList, rooms]);
+
+  // Reset custom occupancy mappings when booking modal opens/closes
+  useEffect(() => {
+    if (isBookingOpen) {
+      setActiveSelectionTab('smart');
+      // Initialize roomAdultsCount and roomKidsCount based on initial selection
+      const nextAdults: Record<string, number> = {};
+      const nextKids: Record<string, number> = {};
+      const nextKidsAges: Record<string, number[]> = {};
+      rooms.forEach(r => {
+        const count = selectedRoomsList.filter(x => x.id === r.id).length;
+        if (count > 0) {
+          nextAdults[r.id] = count * 2;
+          nextKids[r.id] = 0;
+          nextKidsAges[r.id] = [];
+        }
+      });
+      setRoomAdultsCount(nextAdults);
+      setRoomKidsCount(nextKids);
+      setRoomKidsAges(nextKidsAges);
+    } else {
+      setSelectedRoomsList([]);
+      setRoomAdultsCount({});
+      setRoomKidsCount({});
+      setRoomKidsAges({});
+    }
+  }, [isBookingOpen]);
+
+  const handleCustomRoomQuantityChange = (roomId: string, val: number) => {
+    const r = rooms.find(x => x.id === roomId);
+    if (!r) return;
+
+    setSelectedRoomsList(prev => {
+      const currentOfCategory = prev.filter(x => x.id === roomId);
+      const otherCategories = prev.filter(x => x.id !== roomId);
+      const nextCategoryRooms = [...currentOfCategory];
+      if (val > currentOfCategory.length) {
+        const diff = val - currentOfCategory.length;
+        for (let i = 0; i < diff; i++) {
+          nextCategoryRooms.push(r);
+        }
+      } else if (val < currentOfCategory.length) {
+        nextCategoryRooms.splice(val);
+      }
+      return [...otherCategories, ...nextCategoryRooms];
+    });
+
+    if (val > 0) {
+      setRoomAdultsCount(prev => ({
+        ...prev,
+        [roomId]: val * 2
+      }));
+      setRoomKidsCount(prev => ({
+        ...prev,
+        [roomId]: prev[roomId] || 0
+      }));
+      setRoomKidsAges(prev => ({
+        ...prev,
+        [roomId]: prev[roomId] || []
+      }));
+    } else {
+      setRoomAdultsCount(prev => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+      setRoomKidsCount(prev => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+      setRoomKidsAges(prev => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+    }
+  };
+
+  const handleCustomRoomGuestsChange = (roomId: string, type: 'adults' | 'kids', val: number) => {
+    if (type === 'adults') {
+      setRoomAdultsCount(prev => ({ ...prev, [roomId]: val }));
+    } else {
+      setRoomKidsCount(prev => ({ ...prev, [roomId]: val }));
+      setRoomKidsAges(prev => {
+        const currentAges = prev[roomId] || [];
+        const nextAges = [...currentAges];
+        if (val > nextAges.length) {
+          for (let i = nextAges.length; i < val; i++) {
+            nextAges.push(8);
+          }
+        } else if (val < nextAges.length) {
+          nextAges.splice(val);
+        }
+        return {
+          ...prev,
+          [roomId]: nextAges
+        };
+      });
+    }
+  };
 
   useEffect(() => {
     const def = hotelInfo.defaultMealPlan?.toLowerCase();
@@ -2969,290 +3153,420 @@ export const OrganicTemplate: React.FC = () => {
                           <span className="text-[13px] font-black">{totals.nights} Nights</span>
                         </div>
                       </div>
-
-                      {/* Occupancy Counters with +/- */}
-                      <div className="grid grid-cols-2 gap-4">
-                        {/* Adults */}
-                        <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
-                          <div>
-                            <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Adults</span>
-                            <span className="text-[11px] text-zinc-450 block font-semibold">Age {maxAge + 1}+</span>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => setAdultsCount(prev => Math.max(1, prev - 1))}
-                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
-                            >
-                              -
-                            </button>
-                            <span className="w-5 text-center font-black text-sm text-[#3D405B]">{adultsCount}</span>
-                            <button
-                              type="button"
-                              onClick={() => setAdultsCount(prev => Math.min(10, prev + 1))}
-                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Children */}
-                        <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
-                          <div>
-                            <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Children</span>
-                            <span className="text-[11px] text-zinc-450 block font-semibold">Age 0-{maxAge}</span>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => handleChildrenCountChange(Math.max(0, childrenCount - 1))}
-                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
-                            >
-                              -
-                            </button>
-                            <span className="w-5 text-center font-black text-sm text-[#3D405B]">{childrenCount}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleChildrenCountChange(Math.min(5, childrenCount + 1))}
-                              className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
+                      {/* Selection Mode Tabs (Smart vs Make Your Own Combo) */}
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-[#E8E2D6]/40 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSelectionTab('smart');
+                            // Reset selected room list to initial room category if empty
+                            if (selectedRoomsList.length === 0 && selectedRoomId) {
+                              const r = rooms.find(room => room.id === selectedRoomId);
+                              if (r) {
+                                setSelectedRoomsList([r]);
+                              }
+                            }
+                          }}
+                          className={`py-2 px-3 rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all duration-205 cursor-pointer text-center ${
+                            activeSelectionTab === 'smart'
+                              ? 'bg-[#3D405B] text-white shadow-xs'
+                              : 'text-[#333D29]/75 hover:bg-[#FAF6F0]/40'
+                          }`}
+                        >
+                          Smart Recommendations
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSelectionTab('custom')}
+                          className={`py-2 px-3 rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all duration-205 cursor-pointer text-center ${
+                            activeSelectionTab === 'custom'
+                              ? 'bg-[#3D405B] text-white shadow-xs'
+                              : 'text-[#333D29]/75 hover:bg-[#FAF6F0]/40'
+                          }`}
+                        >
+                          Make Your Own Combo
+                        </button>
                       </div>
 
-                      {/* Child Ages specifiers */}
-                      {childrenCount > 0 && (
-                        <div className="bg-white border border-[#D8E2DC] p-4 rounded-2xl space-y-2.5 animate-in slide-in-from-top-2 duration-205">
-                          <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase block font-sans tracking-wide">Specify Child Ages</span>
-                          <div className="grid grid-cols-3 gap-3">
-                            {childrenAges.map((age, idx) => (
-                              <div key={idx} className="space-y-1">
-                                <label className="text-[9px] text-zinc-450 font-bold block font-sans uppercase">Child {idx + 1} Age</label>
-                                <select
-                                  value={age}
-                                  onChange={(e) => {
-                                    const newAges = [...childrenAges];
-                                    newAges[idx] = Number(e.target.value);
-                                    setChildrenAges(newAges);
-                                  }}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-2xs font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
-                                >
-                                  {[...Array(maxAge + 1)].map((_, a) => (
-                                    <option key={a} value={a}>{a} yrs</option>
-                                  ))}
-                                </select>
+                      {activeSelectionTab === 'smart' ? (
+                        <>
+                          {/* Occupancy Counters with +/- */}
+                          <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
+                            {/* Adults */}
+                            <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
+                              <div>
+                                <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Adults</span>
+                                <span className="text-[11px] text-zinc-450 block font-semibold">Age {maxAge + 1}+</span>
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Smart Recommendations Section */}
-                      <div className="space-y-2">
-                        <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Smart Suite Recommendations</span>
-                        {recommendations.length === 0 ? (
-                          <p className="text-[11px] text-rose-500 font-bold">No matches fit your group size. Use Custom Combo builder below.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {recommendations.map((rec, idx) => {
-                              const isCurrentlySelected = currentSelectedRooms.length === rec.rooms.length &&
-                                rec.rooms.every(r => currentSelectedRooms.some(curr => curr.id === r.id));
-
-                              return (
-                                <div
-                                  key={idx}
-                                  onClick={() => {
-                                    setSelectedRoomsList(rec.rooms);
-                                    if (rec.rooms[0]) {
-                                      setSelectedRoomId(rec.rooms[0].id);
-                                    }
-                                  }}
-                                  className={`p-3 border rounded-2xl text-left transition duration-200 cursor-pointer ${
-                                    isCurrentlySelected
-                                      ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
-                                      : 'bg-white border-[#D8E2DC] hover:border-[#8FA89B]'
-                                  }`}
+                              <div className="flex items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setAdultsCount(prev => Math.max(1, prev - 1))}
+                                  className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                                 >
-                                  <div className="flex justify-between items-start">
-                                    <div className="max-w-[70%]">
-                                      <span className={`text-[10px] font-black uppercase px-2.5 py-0.8 rounded-full ${
-                                        rec.type === 'combo' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                      }`}>
-                                        {rec.type === 'combo' ? 'Combo Option' : 'Single Room Option'}
-                                      </span>
-                                      <h4 className="font-extrabold text-[#3D405B] text-[13.5px] pt-1.5 leading-snug">{rec.label}</h4>
-                                      <p className="text-xs text-zinc-500 leading-normal mt-0.5">{rec.description}</p>
+                                  -
+                                </button>
+                                <span className="w-5 text-center font-black text-sm text-[#3D405B]">{adultsCount}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setAdultsCount(prev => Math.min(10, prev + 1))}
+                                  className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
 
-                                      {/* Room Thumbnail Photos Grid */}
-                                      <div className="flex gap-2 mt-2 overflow-x-auto py-0.5 scrollbar-none">
-                                        {Array.from(new Set(rec.rooms.flatMap(r => r.photos || []))).slice(0, 3).map((photoUrl, pIdx) => (
-                                          <img
-                                            key={pIdx}
-                                            src={photoUrl}
-                                            alt="Room thumbnail"
-                                            className="w-24 h-16 object-cover rounded-xl border border-zinc-200 shadow-2xs"
-                                          />
-                                        ))}
+                            {/* Children */}
+                            <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl flex items-center justify-between">
+                              <div>
+                                <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase tracking-wider block">Children</span>
+                                <span className="text-[11px] text-zinc-450 block font-semibold">Age 0-{maxAge}</span>
+                              </div>
+                              <div className="flex items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleChildrenCountChange(Math.max(0, childrenCount - 1))}
+                                  className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
+                                >
+                                  -
+                                </button>
+                                <span className="w-5 text-center font-black text-sm text-[#3D405B]">{childrenCount}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleChildrenCountChange(Math.min(5, childrenCount + 1))}
+                                  className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Child Ages specifiers */}
+                          {childrenCount > 0 && (
+                            <div className="bg-white border border-[#D8E2DC] p-4 rounded-2xl space-y-2.5 animate-in slide-in-from-top-2 duration-205">
+                              <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase block font-sans tracking-wide">Specify Child Ages</span>
+                              <div className="grid grid-cols-3 gap-3">
+                                {childrenAges.map((age, idx) => (
+                                  <div key={idx} className="space-y-1">
+                                    <label className="text-[9px] text-zinc-450 font-bold block font-sans uppercase">Child {idx + 1} Age</label>
+                                    <select
+                                      value={age}
+                                      onChange={(e) => {
+                                        const newAges = [...childrenAges];
+                                        newAges[idx] = Number(e.target.value);
+                                        setChildrenAges(newAges);
+                                      }}
+                                      className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-2xs font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
+                                    >
+                                      {[...Array(maxAge + 1)].map((_, a) => (
+                                        <option key={a} value={a}>{a} yrs</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Smart Recommendations Section */}
+                          <div className="space-y-2 animate-in fade-in duration-300">
+                            <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Smart Suite Recommendations</span>
+                            {recommendations.length === 0 ? (
+                              <p className="text-[11px] text-rose-500 font-bold text-center py-4 bg-rose-50/30 border border-rose-200/50 rounded-2xl">No matches fit your group size. Try another date or custom configuration.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {recommendations.map((rec, idx) => {
+                                  const isCurrentlySelected = currentSelectedRooms.length === rec.rooms.length &&
+                                    rec.rooms.every(r => currentSelectedRooms.some(curr => curr.id === r.id));
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() => {
+                                        setSelectedRoomsList(rec.rooms);
+                                        if (rec.rooms[0]) {
+                                          setSelectedRoomId(rec.rooms[0].id);
+                                        }
+                                      }}
+                                      className={`p-3 border rounded-2xl text-left transition duration-200 cursor-pointer ${
+                                        isCurrentlySelected
+                                          ? 'bg-[#EBF0EC] border-[#8FA89B] ring-2 ring-[#8FA89B]/20'
+                                          : 'bg-white border-[#D8E2DC] hover:border-[#8FA89B]'
+                                      }`}
+                                    >
+                                      <div className="flex justify-between items-start">
+                                        <div className="max-w-[70%]">
+                                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.8 rounded-full ${
+                                            rec.type === 'combo' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                          }`}>
+                                            {rec.type === 'combo' ? 'Combo Option' : 'Single Room Option'}
+                                          </span>
+                                          <h4 className="font-extrabold text-[#3D405B] text-[13.5px] pt-1.5 leading-snug">{rec.label}</h4>
+                                          <p className="text-xs text-zinc-500 leading-normal mt-0.5">{rec.description}</p>
+
+                                          {/* Room Thumbnail Photos Grid */}
+                                          <div className="flex gap-2 mt-2 overflow-x-auto py-0.5 scrollbar-none">
+                                            {Array.from(new Set(rec.rooms.flatMap(r => r.photos || []))).slice(0, 3).map((photoUrl, pIdx) => (
+                                              <img
+                                                key={pIdx}
+                                                src={photoUrl}
+                                                alt="Room thumbnail"
+                                                className="w-24 h-16 object-cover rounded-xl border border-zinc-200 shadow-2xs"
+                                              />
+                                            ))}
+                                          </div>
+
+                                          {/* Know More Button */}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPopoverCombo(rec);
+                                            }}
+                                            className="text-[11px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-2.5 block cursor-pointer"
+                                          >
+                                            Know More & Plan Details
+                                          </button>
+                                        </div>
+                                        <div className="text-right shrink-0 flex flex-col items-end">
+                                          {rec.originalPrice > rec.price ? (
+                                            <>
+                                              <span className="line-through text-zinc-400 text-[10.5px] font-semibold block leading-none mb-0.5">
+                                                ₹{rec.originalPrice.toLocaleString('en-IN')}
+                                              </span>
+                                              <span className="text-sm font-black text-[#E07A5F] block leading-none">
+                                                ₹{rec.price.toLocaleString('en-IN')}
+                                              </span>
+                                              <span className="text-emerald-600 font-extrabold text-[9px] uppercase tracking-wide block mt-1">
+                                                {Math.round(((rec.originalPrice - rec.price) / rec.originalPrice) * 100)}% OFF
+                                              </span>
+                                            </>
+                                          ) : (
+                                            <span className="text-sm font-black text-[#E07A5F] block">
+                                              ₹{rec.price.toLocaleString('en-IN')}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-zinc-450 font-semibold mt-1">total stay</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Custom Combo Builder (Make Your Own Combo) */}
+                          <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3.5 text-left animate-in fade-in duration-300">
+                            <div>
+                              <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Make Your Own Combo</span>
+                              <p className="text-xs text-zinc-500 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
+                            </div>
+                            <div className="space-y-3.5">
+                              {rooms.map(room => {
+                                const count = selectedRoomsList.filter(r => r.id === room.id).length;
+                                const isSelectable = roomInventoryStatuses[room.id]?.selectable ?? true;
+                                const datesInfo = roomInventoryStatuses[room.id]?.datesInfo || [];
+
+                                const roomAdults = roomAdultsCount[room.id] || count;
+                                const roomKids = roomKidsCount[room.id] || 0;
+                                const maxOccupancyLimit = count * (room.capacityAdults || 2);
+
+                                return (
+                                  <div 
+                                    key={room.id} 
+                                    className={`p-3.5 rounded-2xl border transition text-left space-y-3.5 ${
+                                      !isSelectable 
+                                        ? 'bg-zinc-50/50 border-zinc-200 opacity-60' 
+                                        : count > 0 
+                                        ? 'bg-[#EBF0EC]/30 border-[#8FA89B]' 
+                                        : 'bg-white border-zinc-200 hover:bg-zinc-50/20'
+                                    }`}
+                                  >
+                                    <div className="flex gap-3 items-center justify-between">
+                                      {/* Room info / details */}
+                                      <div className="flex gap-3 items-center min-w-0">
+                                        <div className="w-16 h-12 shrink-0 rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50">
+                                          {room.photos && room.photos[0] ? (
+                                            <img src={room.photos[0]} alt={room.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400 font-bold bg-zinc-100">NO IMG</div>
+                                          )}
+                                        </div>
+
+                                        <div className="min-w-0">
+                                          <span className="font-extrabold text-[#3D405B] text-xs block uppercase truncate leading-tight">{room.name}</span>
+                                          <span className="text-[10px] text-zinc-450 block font-extrabold tracking-wide uppercase mt-0.5">
+                                            BASE {room.base_occupancy || 0} · MIN {room.min_occupancy || 1} · MAX {room.capacityAdults || 2}
+                                          </span>
+                                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                            <span className="text-[9.5px] text-[#E07A5F] font-bold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => setPopoverCombo({
+                                              rooms: [room],
+                                              label: room.name,
+                                              description: room.description,
+                                              price: room.basePrice,
+                                              originalPrice: room.basePrice,
+                                              type: 'single'
+                                            })}
+                                            className="text-[9.5px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-1 block cursor-pointer"
+                                          >
+                                            Know More
+                                          </button>
+                                        </div>
                                       </div>
 
-                                      {/* Know More Button */}
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setPopoverCombo(rec);
-                                        }}
-                                        className="text-[11px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-2.5 block cursor-pointer"
-                                      >
-                                        Know More & Plan Details
-                                      </button>
+                                      {/* Quantity controls */}
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                          type="button"
+                                          disabled={count <= 0}
+                                          onClick={() => handleCustomRoomQuantityChange(room.id, Math.max(0, count - 1))}
+                                          className="w-7 h-7 rounded-full border border-zinc-200 bg-white hover:bg-zinc-150 flex items-center justify-center font-bold text-zinc-650 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="w-3.5 text-center font-black text-xs text-zinc-850">{count}</span>
+                                        <button
+                                          type="button"
+                                          disabled={!isSelectable}
+                                          onClick={() => handleCustomRoomQuantityChange(room.id, count + 1)}
+                                          className="w-7 h-7 rounded-full border border-zinc-200 bg-white hover:bg-zinc-150 flex items-center justify-center font-bold text-zinc-650 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
                                     </div>
-                                    <div className="text-right shrink-0 flex flex-col items-end">
-                                      {rec.originalPrice > rec.price ? (
-                                        <>
-                                          <span className="line-through text-zinc-400 text-[10.5px] font-semibold block leading-none mb-0.5">
-                                            ₹{rec.originalPrice.toLocaleString('en-IN')}
-                                          </span>
-                                          <span className="text-sm font-black text-[#E07A5F] block leading-none">
-                                            ₹{rec.price.toLocaleString('en-IN')}
-                                          </span>
-                                          <span className="text-emerald-600 font-extrabold text-[9px] uppercase tracking-wide block mt-1">
-                                            {Math.round(((rec.originalPrice - rec.price) / rec.originalPrice) * 100)}% OFF
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <span className="text-sm font-black text-[#E07A5F] block">
-                                          ₹{rec.price.toLocaleString('en-IN')}
+
+                                    {/* Datewise inventory badges */}
+                                    {datesInfo.length > 0 && (
+                                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100">
+                                        {datesInfo.map((item: any) => {
+                                          const isSoldOut = item.avail <= 0;
+                                          return (
+                                            <div 
+                                              key={item.dateStr} 
+                                              className={`flex flex-col items-center justify-center border rounded-xl px-2.5 py-1.5 min-w-[64px] text-center bg-white ${
+                                                isSoldOut 
+                                                  ? 'border-rose-200 bg-rose-50/50' 
+                                                  : 'border-zinc-200'
+                                              }`}
+                                            >
+                                              <span className="text-[9px] font-bold text-zinc-455 block">{item.displayStr}</span>
+                                              <span className={`text-[9.5px] font-black block mt-0.5 ${
+                                                isSoldOut ? 'text-rose-600' : 'text-zinc-850'
+                                              }`}>
+                                                {isSoldOut ? 'Sold Out' : `${item.avail} avl`}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+
+                                    {/* Inline Guest Limit Controllers (Image 1 Ref) */}
+                                    {count > 0 && (
+                                      <div className="pt-3 border-t border-dashed border-zinc-200 space-y-2.5 bg-[#FAF9F5]/40 p-2.5 rounded-xl border border-zinc-200/60 text-xs">
+                                        <span className="text-[9px] font-black text-zinc-455 uppercase tracking-wider block">
+                                          Configure guests in {room.name}:
                                         </span>
-                                      )}
-                                      <span className="text-[10px] text-zinc-450 font-semibold mt-1">total stay</span>
-                                    </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                          <div className="flex items-center justify-between">
+                                            <span className="font-bold text-zinc-650">Adults:</span>
+                                            <div className="flex items-center border border-zinc-250 bg-white rounded-lg overflow-hidden">
+                                              <button
+                                                type="button"
+                                                disabled={roomAdults <= count}
+                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'adults', roomAdults - 1)}
+                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-600 disabled:opacity-30 font-black cursor-pointer"
+                                              >
+                                                -
+                                              </button>
+                                              <span className="px-2 text-[10.5px] font-black font-mono">{roomAdults}</span>
+                                              <button
+                                                type="button"
+                                                disabled={roomAdults + roomKids >= maxOccupancyLimit}
+                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'adults', roomAdults + 1)}
+                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-650 disabled:opacity-30 font-black cursor-pointer"
+                                              >
+                                                +
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center justify-between">
+                                            <span className="font-bold text-zinc-650">Kids:</span>
+                                            <div className="flex items-center border border-zinc-250 bg-white rounded-lg overflow-hidden">
+                                              <button
+                                                type="button"
+                                                disabled={roomKids <= 0}
+                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'kids', roomKids - 1)}
+                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-600 disabled:opacity-30 font-black cursor-pointer"
+                                              >
+                                                -
+                                              </button>
+                                              <span className="px-2 text-[10.5px] font-black font-mono">{roomKids}</span>
+                                              <button
+                                                type="button"
+                                                disabled={roomAdults + roomKids >= maxOccupancyLimit}
+                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'kids', roomKids + 1)}
+                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-650 disabled:opacity-30 font-black cursor-pointer"
+                                              >
+                                                +
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Child Ages specifiers (when kids count > 0) */}
+                                        {roomKids > 0 && (
+                                          <div className="space-y-1.5 pt-2.5 border-t border-dashed border-zinc-200">
+                                            <span className="text-[9.5px] font-extrabold uppercase block font-sans tracking-wide">Specify Child Ages:</span>
+                                            <div className="grid grid-cols-3 gap-2">
+                                              {(roomKidsAges[room.id] || Array(roomKids).fill(8)).map((age, idx) => (
+                                                <div key={idx} className="space-y-1">
+                                                  <label className="text-[8.5px] text-zinc-400 font-bold block uppercase">Child {idx + 1}</label>
+                                                  <select
+                                                    value={age}
+                                                    onChange={(e) => {
+                                                      const currentAges = [...(roomKidsAges[room.id] || Array(roomKids).fill(8))];
+                                                      currentAges[idx] = Number(e.target.value);
+                                                      setRoomKidsAges(prev => ({
+                                                        ...prev,
+                                                        [room.id]: currentAges
+                                                      }));
+                                                    }}
+                                                    className="w-full bg-white border border-zinc-200 rounded-lg px-1.5 py-0.5 text-[10px] font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
+                                                  >
+                                                    {[...Array(maxAge + 1)].map((_, a) => (
+                                                      <option key={a} value={a}>{a} yrs</option>
+                                                    ))}
+                                                  </select>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        <p className="text-[9px] text-zinc-400 font-semibold text-right">
+                                          Total occupancy limit (Adults + Kids): max {maxOccupancyLimit}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Divider */}
-                      {recommendations.length > 0 && (
-                        <div className="flex items-center justify-center my-4.5">
-                          <div className="h-px bg-zinc-200 flex-1"></div>
-                          <span className="px-3 text-[10px] font-black uppercase text-zinc-400 tracking-widest bg-[#FAF6F0] border border-zinc-250/70 rounded-full py-0.5 select-none">OR</span>
-                          <div className="h-px bg-zinc-200 flex-1"></div>
-                        </div>
+                        </>
                       )}
-
-                      {/* Custom Combo Builder (Make Your Own Combo) */}
-                      <div className="bg-white border border-zinc-200 p-4 rounded-2xl space-y-3 text-left animate-in fade-in duration-300">
-                        <div>
-                          <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Make Your Own Combo</span>
-                          <p className="text-xs text-zinc-500 mt-0.5">Select custom quantity of each suite type to customize your stay combo.</p>
-                        </div>
-                        <div className="space-y-2">
-                          {rooms.filter(room => {
-                            const minOcc = room.min_occupancy || 1;
-                            const totalRequired = adultsCount + childrenCount;
-                            return totalRequired >= minOcc;
-                          }).map(room => {
-                            const count = currentSelectedRooms.filter(r => r.id === room.id).length;
-                            return (
-                              <div key={room.id} className="flex gap-3 items-center py-2.5 border-b border-zinc-50 last:border-0">
-                                {/* Thumbnail Image */}
-                                <div className="w-16 h-12 shrink-0 rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50">
-                                  {room.photos && room.photos[0] ? (
-                                    <img src={room.photos[0]} alt={room.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400 font-bold bg-zinc-100">NO IMG</div>
-                                  )}
-                                </div>
-
-                                {/* Room Info */}
-                                <div className="flex-1 min-w-0">
-                                  <span className="font-extrabold text-[#3D405B] text-xs block uppercase truncate leading-tight">{room.name}</span>
-                                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                    <span className="text-[9.5px] text-[#E07A5F] font-bold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
-                                    {(() => {
-                                      const avail = getMinAvailableInventoryDuringStay(room.id);
-                                      const minOcc = room.min_occupancy || 1;
-                                      const totalRequired = adultsCount + childrenCount;
-                                      if (totalRequired < minOcc) {
-                                        return (
-                                          <span className="text-[9px] font-bold text-red-500">
-                                            (Min {minOcc} guests)
-                                          </span>
-                                        );
-                                      }
-                                      return (
-                                        <span className={`text-[9px] font-bold ${avail === 0 ? 'text-red-500' : 'text-zinc-400'}`}>
-                                          ({avail === 0 ? 'Sold Out' : `${avail} left`})
-                                        </span>
-                                      );
-                                    })()}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setPopoverCombo({
-                                      rooms: [room],
-                                      label: room.name,
-                                      description: room.description,
-                                      price: room.basePrice,
-                                      originalPrice: room.basePrice,
-                                      type: 'single'
-                                    })}
-                                    className="text-[9.5px] text-[#8FA89B] hover:text-[#7D9689] font-extrabold uppercase tracking-wider underline mt-0.5 block cursor-pointer"
-                                  >
-                                    Know More
-                                  </button>
-                                </div>
-
-                                {/* Count Controls */}
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const idx = currentSelectedRooms.findIndex(r => r.id === room.id);
-                                      if (idx > -1) {
-                                        const newList = [...currentSelectedRooms];
-                                        newList.splice(idx, 1);
-                                        setSelectedRoomsList(newList);
-                                      }
-                                    }}
-                                    className="w-5.5 h-5.5 rounded-full bg-zinc-50 border border-zinc-250 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="w-4 text-center font-black text-xs text-[#3D405B]">{count}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const minOcc = room.min_occupancy || 1;
-                                      const totalRequired = adultsCount + childrenCount;
-                                      if (totalRequired < minOcc) {
-                                        alert(`Category ${room.name} requires a minimum of ${minOcc} guests. You have selected ${totalRequired} guests.`);
-                                        return;
-                                      }
-                                      const avail = getMinAvailableInventoryDuringStay(room.id);
-                                      if (count < avail) {
-                                        setSelectedRoomsList([...currentSelectedRooms, room]);
-                                      } else {
-                                        alert(`No more rooms available of category ${room.name} between ${checkIn} and ${checkOut}`);
-                                      }
-                                    }}
-                                    className="w-5.5 h-5.5 rounded-full bg-zinc-50 border border-zinc-250 flex items-center justify-center font-bold text-zinc-650 hover:bg-zinc-100 cursor-pointer"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
 
                       {comboValidationError && (
                         <div className="bg-rose-50 border border-rose-200 text-rose-600 text-[10.5px] p-3 rounded-xl font-bold leading-normal font-sans text-left mt-3">

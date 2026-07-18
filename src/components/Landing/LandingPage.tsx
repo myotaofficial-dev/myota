@@ -66,7 +66,7 @@ export const LandingPage: React.FC = () => {
     <div className="min-h-screen bg-[#FAF9F6] text-[#1C1917] font-sans antialiased selection:bg-[#1B93A4]/15 selection:text-[#1B93A4]">
       {/* ── Navbar ────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-[#FAF9F6]/80 backdrop-blur-lg border-b border-zinc-200/60 transition-all">
-        <div className="max-w-6xl mx-auto px-6 h-18 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-18 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-md" style={{ background: '#1B93A4' }}>
               <svg className="w-4.5 h-4.5 fill-current" viewBox="0 0 24 24">
@@ -85,19 +85,19 @@ export const LandingPage: React.FC = () => {
             <a href="#faqs" className="hover:text-[#1B93A4] transition-colors">FAQs</a>
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={() => {
                 localStorage.setItem('myota_onboarding_mode', 'signin');
                 setAppMode('onboarding');
               }}
-              className="text-xs font-bold uppercase tracking-wider text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
+              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
             >
               Sign In
             </button>
             <button
               onClick={() => setAppMode('onboarding')}
-              className="text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-xl text-white transition-all hover:scale-[1.02] active:scale-95 shadow-md cursor-pointer"
+              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-white transition-all hover:scale-[1.02] active:scale-95 shadow-md cursor-pointer"
               style={{ background: '#1C1917' }}
             >
               Get Started

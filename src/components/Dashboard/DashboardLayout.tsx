@@ -3,7 +3,7 @@ import { useHotel } from '../../context/HotelContext';
 import { Sidebar } from './Sidebar';
 import { PreviewFrame } from './PreviewFrame';
 import {
-  ChevronLeft, Eye, Send, Monitor, Tablet, Smartphone, Check
+  ChevronLeft, Eye, Send, Monitor, Tablet, Smartphone, Check, Menu, X
 } from 'lucide-react';
 
 // Form dispatcher
@@ -33,6 +33,7 @@ export const DashboardLayout: React.FC = () => {
   } = useHotel();
 
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [isEditorSidebarOpen, setIsEditorSidebarOpen] = useState(false);
 
   const handlePublish = () => {
     publishProperty(activePropertyId);
@@ -107,10 +108,10 @@ export const DashboardLayout: React.FC = () => {
     <div className="flex flex-col h-screen w-screen bg-[#F8FAFC] overflow-hidden text-zinc-800 animate-in fade-in duration-150">
 
       {/* Top Editor Navigation Bar (Image 2) */}
-      <header className="bg-white border-b border-zinc-200 h-14 px-6 flex items-center justify-between z-20 shrink-0 select-none">
+      <header className="bg-white border-b border-zinc-200 h-14 px-4 sm:px-6 flex items-center justify-between z-20 shrink-0 select-none">
 
-        {/* Left Side: Back button & Brand */}
-        <div className="flex items-center gap-4">
+        {/* Left Side: Back button, Mobile Menu button & Brand */}
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
             onClick={() => setAppMode('dashboard')}
             className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-950 transition cursor-pointer"
@@ -119,7 +120,15 @@ export const DashboardLayout: React.FC = () => {
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
 
-          <div className="flex items-center gap-2 border-l border-[#E7E5E4] pl-4">
+          <button
+            onClick={() => setIsEditorSidebarOpen(true)}
+            className="lg:hidden p-1.5 hover:bg-[#FAFAF9] rounded-lg text-zinc-650 border border-zinc-250 transition"
+            title="Open Editor Menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+
+          <div className="hidden sm:flex items-center gap-2 border-l border-[#E7E5E4] pl-4">
             <div className="w-6 h-6 rounded-md flex items-center justify-center text-white font-bold" style={{ background: 'var(--ds-primary)' }}>
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
@@ -130,12 +139,12 @@ export const DashboardLayout: React.FC = () => {
         </div>
 
         {/* Center: Theme Selector & Property Switcher */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Theme selector */}
           <select
             value={selectedTheme}
             onChange={(e) => setSelectedTheme(e.target.value)}
-            className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2.5 py-1 text-4xs font-bold uppercase tracking-wider text-[#78716C] outline-hidden focus:border-[#1B93A4] cursor-pointer"
+            className="hidden md:block bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2.5 py-1 text-4xs font-bold uppercase tracking-wider text-[#78716C] outline-hidden focus:border-[#1B93A4] cursor-pointer"
           >
             <option value="THEME: ORGANIC NATURAL">Theme: Organic/Natural</option>
           </select>
@@ -144,7 +153,7 @@ export const DashboardLayout: React.FC = () => {
           <select
             value={activePropertyId}
             onChange={(e) => handlePropertyChange(e.target.value)}
-            className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-3 py-1 text-xs text-[#1C1917] font-bold outline-hidden focus:border-[#1B93A4] cursor-pointer"
+            className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2 sm:px-3 py-1 text-xs text-[#1C1917] font-bold outline-hidden focus:border-[#1B93A4] cursor-pointer max-w-[120px] sm:max-w-none"
           >
             {propertiesList.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -153,10 +162,10 @@ export const DashboardLayout: React.FC = () => {
         </div>
 
         {/* Right Side: Preview & Publish Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Publish Alerts */}
           {publishSuccess && (
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-[#E8F5EF] border border-[#2D6A4F] text-[#2D6A4F] text-3xs font-semibold rounded-lg animate-in fade-in duration-200">
+            <div className="hidden xl:flex items-center gap-1 px-2.5 py-1 bg-[#E8F5EF] border border-[#2D6A4F] text-[#2D6A4F] text-3xs font-semibold rounded-lg animate-in fade-in duration-200">
               <Check className="w-3.5 h-3.5 text-[#2D6A4F] font-bold" />
               <span>Site published live!</span>
             </div>
@@ -166,9 +175,10 @@ export const DashboardLayout: React.FC = () => {
             /* Back to Preview Button (Image 2 style) */
             <button
               onClick={() => setEditorFocus('canvas')}
-              className="flex items-center gap-1.5 bg-white border border-[#E7E5E4] hover:bg-[#FAFAF9] text-[#78716C] font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow-3xs cursor-pointer"
+              className="flex items-center gap-1.5 bg-white border border-[#E7E5E4] hover:bg-[#FAFAF9] text-[#78716C] font-bold text-xs px-2.5 sm:px-3.5 py-1.5 rounded-lg transition shadow-3xs cursor-pointer"
             >
-              <span>← Back to Preview</span>
+              <span className="hidden sm:inline">← Back to Preview</span>
+              <span className="sm:hidden">← Preview</span>
             </button>
           ) : (
             /* Guest Mode Preview Toggle */
@@ -177,20 +187,21 @@ export const DashboardLayout: React.FC = () => {
                 const sub = hotelInfo?.subdomain || 'grandlake';
                 window.open(`/?preview=${sub}`, '_blank');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Preview</span>
+              <span className="hidden sm:inline">Preview</span>
             </button>
           )}
 
           {/* Publish */}
           <button
             onClick={handlePublish}
-            className="flex items-center gap-1.5 text-white font-bold text-xs px-4 py-1.5 rounded-lg transition shadow-xs cursor-pointer ds-btn-primary"
+            className="flex items-center gap-1.5 text-white font-bold text-xs px-3 sm:px-4 py-1.5 rounded-lg transition shadow-xs cursor-pointer ds-btn-primary"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Publish Site</span>
+            <span className="hidden sm:inline">Publish Site</span>
+            <span className="sm:hidden">Publish</span>
           </button>
         </div>
 
@@ -209,11 +220,42 @@ export const DashboardLayout: React.FC = () => {
         ) : (
           /* Editor Workspace */
           <>
-            <Sidebar />
+            {/* Desktop Sidebar (inline) */}
+            <div className="hidden lg:block h-full shrink-0">
+              <Sidebar />
+            </div>
+
+            {/* Mobile Sidebar Overlay Backdrop */}
+            {isEditorSidebarOpen && (
+              <div 
+                className="lg:hidden fixed inset-0 z-45 bg-black/45 backdrop-blur-xs"
+                onClick={() => setIsEditorSidebarOpen(false)}
+              />
+            )}
+
+            {/* Mobile Sidebar Drawer */}
+            <aside 
+              className={`lg:hidden fixed inset-y-0 left-0 z-50 w-56 bg-white border-r h-full flex flex-col transition-transform duration-300 ease-in-out transform ${
+                isEditorSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+              }`}
+            >
+              <div className="p-4 border-b flex items-center justify-between bg-zinc-50 shrink-0">
+                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Editor Menu</span>
+                <button 
+                  onClick={() => setIsEditorSidebarOpen(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-200 text-zinc-500 cursor-pointer border border-zinc-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto" onClick={() => setIsEditorSidebarOpen(false)}>
+                <Sidebar />
+              </div>
+            </aside>
 
             {editorFocus === 'form' ? (
               /* Form Focus Mode (Image 2 Layout) - Centers settings in spacious layout */
-              <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-8 scrollbar-thin scrollbar-thumb-zinc-200 flex justify-center animate-in fade-in slide-in-from-right duration-200">
+              <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-8 scrollbar-thin scrollbar-thumb-zinc-200 flex justify-center animate-in fade-in slide-in-from-right duration-200">
                 <div className="w-full max-w-4xl">
                   {renderActiveForm()}
                 </div>
