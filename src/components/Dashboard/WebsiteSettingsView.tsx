@@ -61,18 +61,27 @@ export const WebsiteSettingsView: React.FC = () => {
 
   return (
     <div className="space-y-6 text-left">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border border-[#E7E5E4] px-5 py-3 rounded-2xl shadow-xs flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Publish Settings & Customizations</h2>
-          <p className="text-sm text-[#78716C]">Configure theme layout styles, setup checkout processors, and inject marketing tags.</p>
+          <h2 className="text-xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Publish Settings & Customizations</h2>
+          <p className="text-xs text-[#78716C]">Configure theme accent colors, templates, checkout & marketing tags.</p>
         </div>
-        {saveSuccess && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#E8F5EF] border border-[#2D6A4F] text-[#2D6A4F] text-xs font-semibold rounded-lg">
-            <CheckCircle className="w-4 h-4" />
-            <span>Theme settings updated!</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {saveSuccess && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#E8F5EF] border border-[#2D6A4F] text-[#2D6A4F] text-xs font-semibold rounded-lg">
+              <CheckCircle className="w-4 h-4" />
+              <span>Theme settings updated!</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleBrandingSave}
+            className="ds-btn-primary"
+          >
+            Save Accent & Theme
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

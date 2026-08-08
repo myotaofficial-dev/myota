@@ -1,15 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { useScroll, useTransform, motion } from 'framer-motion';
+import React from 'react';
 
 const defaultImages = [
-  "https://assets.codepen.io/16327/portrait-pattern-1.jpg",
-  "https://assets.codepen.io/16327/portrait-image-12.jpg",
-  "https://assets.codepen.io/16327/portrait-image-8.jpg",
-  "https://assets.codepen.io/16327/portrait-pattern-2.jpg",
-  "https://assets.codepen.io/16327/portrait-image-4.jpg",
-  "https://assets.codepen.io/16327/portrait-image-3.jpg",
-  "https://assets.codepen.io/16327/portrait-pattern-3.jpg",
-  "https://assets.codepen.io/16327/portrait-image-6.jpg",
+  "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1200",
+  "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=1200",
+  "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=1200",
+  "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=1200",
+  "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=1200"
 ];
 
 interface BentoGalleryProps {
@@ -19,88 +15,80 @@ interface BentoGalleryProps {
   onImageClick?: (index: number, images: string[]) => void;
 }
 
-export const BentoGallery: React.FC<BentoGalleryProps> = ({ images, scrollContainerRef, onImageClick }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scrollerNode, setScrollerNode] = useState<HTMLDivElement | null>(null);
-  const dynamicScrollerRef = useRef<HTMLDivElement | null>(null);
-  dynamicScrollerRef.current = scrollerNode;
-
-  // Combine custom images with default ones if there are fewer than 8
-  const displayImages = React.useMemo(() => {
-    const list = [...(images || [])].filter(url => !!url);
-    if (list.length >= 8) return list.slice(0, 8);
-    
-    const padded = [...list];
-    for (let i = padded.length; i < 8; i++) {
-      padded.push(defaultImages[i % defaultImages.length]);
-    }
-    return padded;
+export const BentoGallery: React.FC<BentoGalleryProps> = ({ images, onImageClick }) => {
+  // All images
+  const allImages = React.useMemo(() => {
+    const list = (images || []).filter(url => !!url);
+    if (list.length > 0) return list;
+    return defaultImages;
   }, [images]);
 
-  // Find scrollable parent container dynamically on mount if not provided as prop
-  useEffect(() => {
-    if (scrollContainerRef?.current) {
-      setScrollerNode(scrollContainerRef.current);
-    } else if (containerRef.current) {
-      const el = containerRef.current.closest('.overflow-y-auto') as HTMLDivElement;
-      if (el) {
-        setScrollerNode(el);
-      }
+  // Display top 5 photos in a perfectly balanced 4-column x 2-row Bento grid
+  const top5Images = React.useMemo(() => {
+    return allImages.slice(0, 5);
+  }, [allImages]);
+
+  const remainingCount = allImages.length - 4; // Remaining count after top 4
+
+  // Bento layout mapping: 5 items filling a 4x2 grid with 0 empty gaps
+  const getItemClasses = (index: number) => {
+    switch (index) {
+      case 0:
+        return 'col-span-1 sm:col-span-2 row-span-2 h-72 sm:h-[420px] md:h-[450px]';
+      case 1:
+        return 'col-span-1 row-span-1 h-36 sm:h-[203px] md:h-[217px]';
+      case 2:
+        return 'col-span-1 row-span-1 h-36 sm:h-[203px] md:h-[217px]';
+      case 3:
+        return 'col-span-1 row-span-1 h-36 sm:h-[203px] md:h-[217px]';
+      case 4:
+        return 'col-span-1 row-span-1 h-36 sm:h-[203px] md:h-[217px]';
+      default:
+        return 'col-span-1 row-span-1 h-36 sm:h-[203px] md:h-[217px]';
     }
-  }, [scrollContainerRef, scrollContainerRef?.current]);
-
-  // Track scroll progress of the container relative to the resolved scroll container
-  const { scrollYProgress } = useScroll({
-    container: scrollerNode ? dynamicScrollerRef : undefined,
-    target: containerRef,
-    offset: ['start start', 'end end']
-  });
-
-  // Scale transformations matching Olivier Larose's Zoom Parallax logic
-  // Center item (3rd item) scales the least, outer items scale more to fly out
-  const scale4 = useTransform(scrollYProgress, [0, 1], [1, 4]);
-  const scale5 = useTransform(scrollYProgress, [0, 1], [1, 5]);
-  const scale6 = useTransform(scrollYProgress, [0, 1], [1, 6]);
-  const scale8 = useTransform(scrollYProgress, [0, 1], [1, 8]);
-  const scale9 = useTransform(scrollYProgress, [0, 1], [1, 9]);
-
-  // Bento positions matching index.css grid areas exactly
-  const bentoItems = [
-    { src: displayImages[0], scale: scale5, gridArea: "col-start-1 col-end-2 row-start-1 row-end-3" }, // 1 / 1 / 3 / 2
-    { src: displayImages[1], scale: scale6, gridArea: "col-start-2 col-end-3 row-start-1 row-end-2" }, // 1 / 2 / 2 / 3
-    { src: displayImages[2], scale: scale4, gridArea: "col-start-2 col-end-3 row-start-2 row-end-4" }, // 2 / 2 / 4 / 3 (Center)
-    { src: displayImages[3], scale: scale5, gridArea: "col-start-3 col-end-4 row-start-1 row-end-3" }, // 1 / 3 / 3 / 4
-    { src: displayImages[4], scale: scale6, gridArea: "col-start-1 col-end-2 row-start-3 row-end-4" }, // 3 / 1 / 4 / 2
-    { src: displayImages[5], scale: scale8, gridArea: "col-start-3 col-end-4 row-start-3 row-end-5" }, // 3 / 3 / 5 / 4
-    { src: displayImages[6], scale: scale9, gridArea: "col-start-1 col-end-2 row-start-4 row-end-5" }, // 4 / 1 / 5 / 2
-    { src: displayImages[7], scale: scale8, gridArea: "col-start-2 col-end-3 row-start-4 row-end-5" }, // 4 / 2 / 5 / 3
-  ];
+  };
 
   return (
-    <div ref={containerRef} className="relative w-full h-[300vh]">
-      <div className="sticky top-0 w-full h-screen flex items-center justify-center overflow-hidden bg-transparent">
-        {bentoItems.map((item, idx) => (
-          <motion.div
-            key={idx}
-            style={{ scale: item.scale }}
-            className="absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none"
-          >
-            <div 
-              className="w-full h-full max-w-[98vw] max-h-[92vh] grid gap-[1vh] p-[1vh] justify-center align-center"
-              style={{
-                gridTemplateColumns: 'repeat(3, 32.5vw)',
-                gridTemplateRows: 'repeat(4, 23vh)'
-              }}
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 md:px-12 lg:px-16">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+        {top5Images.map((src, idx) => {
+          const is5thItem = idx === 4 && remainingCount > 1;
+
+          return (
+            <div
+              key={idx}
+              onClick={() => onImageClick?.(idx, allImages)}
+              className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl border border-[#D8E2DC]/60 shadow-xs cursor-pointer ${getItemClasses(idx)}`}
             >
-              <div 
-                onClick={() => onImageClick?.(idx, displayImages)}
-                className={`${item.gridArea} pointer-events-auto rounded-xl overflow-hidden border border-zinc-200/10 shadow-sm relative w-full h-full cursor-pointer hover:opacity-90 active:scale-99 transition`}
-              >
-                <img src={item.src} alt={`Resort View ${idx + 1}`} className="w-full h-full object-cover" />
-              </div>
+              {/* Image with subtle hover zoom effect */}
+              <img
+                src={src}
+                alt={`Resort View ${idx + 1}`}
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                loading="lazy"
+              />
+
+              {/* 5th item overlay showing remaining photos count */}
+              {is5thItem ? (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white transition-all group-hover:bg-black/70">
+                  <span className="text-xl sm:text-2xl font-black tracking-tight font-sans">
+                    +{remainingCount}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/80 mt-0.5 font-sans">
+                    More Photos
+                  </span>
+                </div>
+              ) : (
+                /* Hover-only overlay for VIEW PHOTO button */
+                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                  <span className="text-white text-xs font-semibold uppercase tracking-widest bg-black/50 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/20 shadow-md">
+                    View Photo
+                  </span>
+                </div>
+              )}
             </div>
-          </motion.div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

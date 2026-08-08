@@ -10,7 +10,7 @@ import {
 
 export const PricingCalendarView: React.FC = () => {
   const { 
-    rooms, pricing, updateDateOverride, setRooms, hotelInfo, 
+    rooms, pricing, updateDateOverride, updateRoom, setRooms, hotelInfo, 
     getAvailableInventory, propertiesList, activePropertyId, setActivePropertyId 
   } = useHotel();
   
@@ -250,28 +250,23 @@ export const PricingCalendarView: React.FC = () => {
       });
     });
 
-    // Update rooms list in Context
-    setRooms(prev => prev.map(r => {
-      if (r.id === selectedRoomId) {
-        const nextInventory = { ...(r.inventory_overrides || {}) };
-        const nextRates = { ...(r.rate_overrides || {}) };
-        const nextCancellation = { ...(r.cancellation_policy_overrides || {}) };
-        
-        targetDates.forEach(dateStr => {
-          nextInventory[dateStr] = Number(overrideInventory);
-          nextRates[dateStr] = parsedRates;
-          nextCancellation[dateStr] = overrideCancellationPolicy;
-        });
+    // Compute updated override maps
+    const nextInventory = { ...(selectedRoom.inventory_overrides || {}) };
+    const nextRates = { ...(selectedRoom.rate_overrides || {}) };
+    const nextCancellation = { ...(selectedRoom.cancellation_policy_overrides || {}) };
+    
+    targetDates.forEach(dateStr => {
+      nextInventory[dateStr] = Number(overrideInventory);
+      nextRates[dateStr] = parsedRates;
+      nextCancellation[dateStr] = overrideCancellationPolicy;
+    });
 
-        return {
-          ...r,
-          inventory_overrides: nextInventory,
-          rate_overrides: nextRates,
-          cancellation_policy_overrides: nextCancellation
-        };
-      }
-      return r;
-    }));
+    // Persist changes to Supabase room_categories table so they don't disappear on refresh!
+    updateRoom(selectedRoomId, {
+      inventory_overrides: nextInventory,
+      rate_overrides: nextRates,
+      cancellation_policy_overrides: nextCancellation
+    });
 
     // Reset selection
     setSelectedDates([]);
@@ -354,8 +349,7 @@ export const PricingCalendarView: React.FC = () => {
       });
     });
 
-    // Update rooms list in Context
-    setRooms(prev => prev.map(r => {
+    rooms.forEach(r => {
       const overrideInventory = gridInventoryMap[r.id] ?? r.totalInventory;
       const overridePriceTiers = gridPriceTiersMap[r.id] || {};
 
@@ -364,18 +358,20 @@ export const PricingCalendarView: React.FC = () => {
         parsedRates[g] = Number(val) || r.basePrice;
       });
 
-      return {
-        ...r,
-        inventory_overrides: {
-          ...(r.inventory_overrides || {}),
-          [gridSelectedDateStr]: Number(overrideInventory)
-        },
-        rate_overrides: {
-          ...(r.rate_overrides || {}),
-          [gridSelectedDateStr]: parsedRates
-        }
+      const nextInventory = {
+        ...(r.inventory_overrides || {}),
+        [gridSelectedDateStr]: Number(overrideInventory)
       };
-    }));
+      const nextRates = {
+        ...(r.rate_overrides || {}),
+        [gridSelectedDateStr]: parsedRates
+      };
+
+      updateRoom(r.id, {
+        inventory_overrides: nextInventory,
+        rate_overrides: nextRates
+      });
+    });
 
     setGridSelectedDateStr(null);
   };
@@ -389,19 +385,17 @@ export const PricingCalendarView: React.FC = () => {
         price: 0,
         isBlocked: false
       });
-    });
 
-    setRooms(prev => prev.map(r => {
-      const nextInventory = { ...(r.inventory_overrides || {}) };
-      const nextRates = { ...(r.rate_overrides || {}) };
+      const nextInventory = { ...(room.inventory_overrides || {}) };
+      const nextRates = { ...(room.rate_overrides || {}) };
       delete nextInventory[gridSelectedDateStr];
       delete nextRates[gridSelectedDateStr];
-      return {
-        ...r,
+
+      updateRoom(room.id, {
         inventory_overrides: nextInventory,
         rate_overrides: nextRates
-      };
-    }));
+      });
+    });
 
     setGridSelectedDateStr(null);
   };

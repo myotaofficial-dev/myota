@@ -645,26 +645,12 @@ export const DomainView: React.FC = () => {
           <div className="space-y-3">
             <label className="text-xs font-bold text-zinc-700">Logo</label>
             <p className="text-[10px] text-zinc-400">Upload the main logo mark used in navigation and headers.</p>
-            <div className="border border-dashed border-[#E7E5E4] rounded-xl p-4 bg-[#FAFAF9] flex flex-col items-center gap-3">
-              {logoUrl ? (
-                <img src={logoUrl} alt="Logo" className="max-h-16 object-contain" />
-              ) : (
-                <div className="w-full h-12 flex items-center justify-center text-zinc-355 text-xs font-semibold">No logo uploaded</div>
-              )}
-              <MediaUpload label="" value={logoUrl} onChange={setLogoUrl} />
-            </div>
+            <MediaUpload label="" value={logoUrl} onChange={setLogoUrl} />
           </div>
           <div className="space-y-3">
             <label className="text-xs font-bold text-zinc-700">Favicon</label>
-            <p className="text-[10px] text-zinc-400">Upload a browser tab icon (square PNG, 32×32 recommended).</p>
-            <div className="border border-dashed border-[#E7E5E4] rounded-xl p-4 bg-[#FAFAF9] flex flex-col items-center gap-3">
-              {faviconUrl ? (
-                <img src={faviconUrl} alt="Favicon" className="w-8 h-8 object-contain" />
-              ) : (
-                <div className="w-8 h-8 bg-zinc-200 rounded-md flex items-center justify-center text-zinc-450 text-4xs font-bold">FAV</div>
-              )}
-              <MediaUpload label="" value={faviconUrl} onChange={setFaviconUrl} />
-            </div>
+            <p className="text-[10px] text-zinc-400">Upload a browser tab icon (square PNG or WebP, 32×32 recommended).</p>
+            <MediaUpload label="" value={faviconUrl} onChange={setFaviconUrl} />
           </div>
         </div>
       </div>
@@ -1443,7 +1429,28 @@ export const DomainView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans">
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 relative">
+        {selectedView !== 'owners' && (
+          <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E7E5E4] px-5 py-3 shadow-xs flex items-center justify-between gap-4 rounded-xl">
+            <div className="flex items-center gap-2">
+              <span className="ds-badge ds-badge-green hidden sm:flex items-center gap-1.5 shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                <span>Autosave Draft Enabled</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {saveSuccess && (
+                <span className="text-xs text-[#2D6A4F] font-bold animate-in fade-in duration-200">
+                  ✓ Saved successfully
+                </span>
+              )}
+              <button type="submit" disabled={isSyncingInstagram} className="ds-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSyncingInstagram ? 'Syncing Feed...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {renderSelectedForm()}
 
         {selectedView !== 'owners' && (

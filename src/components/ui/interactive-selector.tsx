@@ -345,7 +345,8 @@ const RoomCard: React.FC<{
             e.stopPropagation();
             setShowDetailed(true);
           }}
-          className="text-[10px] font-bold text-[#E07A5F] hover:text-[#f28e74] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition text-left mr-auto mt-0.5"
+          className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition text-left mr-auto mt-0.5 hover:opacity-80"
+          style={{ color: hotelInfo?.primaryColor || '#E07A5F' }}
         >
           <Info className="w-3.5 h-3.5" />
           <span>Know More</span>
@@ -359,7 +360,9 @@ const RoomCard: React.FC<{
                 {hasOffer ? (
                   <div className="flex flex-col text-left">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-[18px] font-black text-[#3D405B]">₹{discountedPrice.toLocaleString('en-IN')}</span>
+                      <span className="text-[18px] font-black text-[#3D405B]" style={{ color: hotelInfo?.primaryColor || '#3D405B' }}>
+                        ₹{discountedPrice.toLocaleString('en-IN')}
+                      </span>
                       <span className="line-through text-gray-400 text-[11px] font-normal">₹{originalPrice.toLocaleString('en-IN')}</span>
                     </div>
                     <span className="text-emerald-600 font-extrabold text-[10px] tracking-wide block leading-none mt-0.5">
@@ -367,7 +370,9 @@ const RoomCard: React.FC<{
                     </span>
                   </div>
                 ) : (
-                  <span className="text-[18px] font-black text-[#3D405B]">₹{originalPrice.toLocaleString('en-IN')}</span>
+                  <span className="text-[18px] font-black text-[#3D405B]" style={{ color: hotelInfo?.primaryColor || '#3D405B' }}>
+                    ₹{originalPrice.toLocaleString('en-IN')}
+                  </span>
                 )}
                 <span className="text-[10px] text-gray-400 font-medium ml-0.5">/night</span>
               </div>
@@ -384,10 +389,11 @@ const RoomCard: React.FC<{
             type="button"
             disabled={availableInventory === 0}
             onClick={(e) => { e.stopPropagation(); onBook(room.id); }}
-            className={`text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap ${
+            style={availableInventory > 0 ? { backgroundColor: hotelInfo?.primaryColor || '#3D405B', color: '#FFFFFF' } : {}}
+            className={`text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap shadow-sm hover:shadow-md ${
               availableInventory === 0
                 ? 'bg-zinc-400 hover:bg-zinc-400 cursor-not-allowed opacity-50'
-                : 'bg-[#3D405B] hover:bg-[#2e3147] active:scale-95'
+                : 'active:scale-95'
             }`}
           >
             {availableInventory === 0 ? 'Sold Out' : 'Book Now'}

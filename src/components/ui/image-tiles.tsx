@@ -1,135 +1,51 @@
-'use client'
-import { motion, type Variants } from 'framer-motion';
+import React from 'react';
 
 interface ImageRevealProps {
-    images: string[];
+  images: string[];
+  handle?: string;
 }
 
-export default function ImageReveal({ images }: ImageRevealProps) {
-    if (!images || images.length < 5) return null;
+// Inline Instagram SVG — avoids lucide-react version mismatch
+const InstagramSVG = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
 
-    const containerVariants: Variants = {
-        initial: { opacity: 0 },
-        animate: {
-            opacity: 1,
-            transition: {
-                delay: 0.1,
-                staggerChildren: 0.1,
-            }
-        }
-    };
+export default function ImageReveal({ images, handle }: ImageRevealProps) {
+  if (!images || images.length === 0) return null;
 
-    // Far Left
-    const farLeftVariants: Variants = {
-        initial: { rotate: 0, x: 0, y: 0 },
-        animate: {
-            rotate: -14,
-            x: -240,
-            y: 18,
-            transition: { type: "spring", stiffness: 120, damping: 12 }
-        },
-        hover: {
-            rotate: -3,
-            x: -260,
-            y: 0,
-            transition: { type: "spring", stiffness: 200, damping: 15 }
-        }
-    };
+  const displayImages = images.slice(0, 5);
 
-    // Left
-    const leftVariants: Variants = {
-        initial: { rotate: 0, x: 0, y: 0 },
-        animate: {
-            rotate: -7,
-            x: -120,
-            y: 6,
-            transition: { type: "spring", stiffness: 120, damping: 12 }
-        },
-        hover: {
-            rotate: 0,
-            x: -130,
-            y: -8,
-            transition: { type: "spring", stiffness: 200, damping: 15 }
-        }
-    };
+  return (
+    <div className="w-full max-w-5xl mx-auto py-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+        {displayImages.map((url, idx) => (
+          <div
+            key={idx}
+            className="group relative aspect-square overflow-hidden rounded-2xl border border-[#D8E2DC]/80 bg-white shadow-xs cursor-pointer"
+          >
+            <img
+              src={url}
+              alt={`Instagram post ${idx + 1}`}
+              className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+              loading="lazy"
+            />
 
-    // Middle
-    const middleVariants: Variants = {
-        initial: { rotate: 0, x: 0, y: 0 },
-        animate: {
-            rotate: 0,
-            x: 0,
-            y: 0,
-            transition: { type: "spring", stiffness: 120, damping: 12 }
-        },
-        hover: {
-            rotate: 0,
-            x: 0,
-            y: -20,
-            transition: { type: "spring", stiffness: 200, damping: 15 }
-        }
-    };
-
-    // Right
-    const rightVariants: Variants = {
-        initial: { rotate: 0, x: 0, y: 0 },
-        animate: {
-            rotate: 7,
-            x: 120,
-            y: 6,
-            transition: { type: "spring", stiffness: 120, damping: 12 }
-        },
-        hover: {
-            rotate: 0,
-            x: 130,
-            y: -8,
-            transition: { type: "spring", stiffness: 200, damping: 15 }
-        }
-    };
-
-    // Far Right
-    const farRightVariants: Variants = {
-        initial: { rotate: 0, x: 0, y: 0 },
-        animate: {
-            rotate: 14,
-            x: 240,
-            y: 18,
-            transition: { type: "spring", stiffness: 120, damping: 12 }
-        },
-        hover: {
-            rotate: 3,
-            x: 260,
-            y: 0,
-            transition: { type: "spring", stiffness: 200, damping: 15 }
-        }
-    };
-
-    const variantsMap = [farLeftVariants, leftVariants, middleVariants, rightVariants, farRightVariants];
-    const zIndexes = [50, 40, 30, 20, 10]; // Stack depth
-
-    return (
-        <motion.div
-            className="relative flex items-center justify-center w-full h-80 my-10"
-            variants={containerVariants}
-            initial="initial"
-            animate="animate"
-        >
-            {images.slice(0, 5).map((url, idx) => (
-                <motion.div
-                    key={idx}
-                    className="absolute w-44 h-44 overflow-hidden rounded-2xl shadow-xl bg-white border border-zinc-200 p-2 cursor-pointer transition-shadow hover:shadow-2xl"
-                    variants={variantsMap[idx]}
-                    whileHover="hover"
-                    animate="animate"
-                    style={{ zIndex: zIndexes[idx] }}
-                >
-                    <img
-                        src={url}
-                        alt={`Instagram post ${idx + 1}`}
-                        className="w-full h-full object-cover rounded-xl"
-                    />
-                </motion.div>
-            ))}
-        </motion.div>
-    );
+            {/* Sleek Instagram Hover Overlay */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white gap-1">
+              <InstagramSVG />
+              {handle && (
+                <span className="text-[10px] font-bold tracking-wider text-white/90 font-sans">
+                  @{handle}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

@@ -419,9 +419,7 @@ export const OrganicTemplate: React.FC = () => {
   const [selectedMealPlan, setSelectedMealPlan] = useState<'ep' | 'cp' | 'map' | 'ap'>('ep');
 
   const [activeSelectionTab, setActiveSelectionTab] = useState<'smart' | 'custom'>('smart');
-  const [roomAdultsCount, setRoomAdultsCount] = useState<Record<string, number>>({});
-  const [roomKidsCount, setRoomKidsCount] = useState<Record<string, number>>({});
-  const [roomKidsAges, setRoomKidsAges] = useState<Record<string, number[]>>({});
+  const [perRoomAllocations, setPerRoomAllocations] = useState<Record<string, Array<{ id: string; adults: number; kids: number; childAges: number[] }>>>({});
 
   const stayNights = differenceInDays(new Date(checkOut), new Date(checkIn)) || 0;
 
@@ -485,46 +483,50 @@ export const OrganicTemplate: React.FC = () => {
       let totalAdults = 0;
       let totalKids = 0;
       const allKidsAges: number[] = [];
-      rooms.forEach(r => {
-        const qty = selectedRoomsList.filter(x => x.id === r.id).length;
-        if (qty > 0) {
-          totalAdults += roomAdultsCount[r.id] || (qty * 2);
-          const kids = roomKidsCount[r.id] || 0;
-          totalKids += kids;
-          const ages = roomKidsAges[r.id] || Array(kids).fill(8);
-          allKidsAges.push(...ages);
+
+      Object.entries(perRoomAllocations).forEach(([roomId, roomConfigs]) => {
+        const isSelected = selectedRoomsList.some(x => x.id === roomId);
+        if (isSelected && roomConfigs && roomConfigs.length > 0) {
+          roomConfigs.forEach(rc => {
+            totalAdults += rc.adults || 2;
+            totalKids += rc.kids || 0;
+            if (rc.childAges && rc.childAges.length > 0) {
+              allKidsAges.push(...rc.childAges);
+            }
+          });
         }
       });
-      setAdultsCount(Math.max(1, totalAdults));
-      setChildrenCount(totalKids);
-      setChildrenAges(allKidsAges);
-    }
-  }, [activeSelectionTab, roomAdultsCount, roomKidsCount, roomKidsAges, selectedRoomsList, rooms]);
 
-  // Reset custom occupancy mappings when booking modal opens/closes
+      if (selectedRoomsList.length > 0) {
+        setAdultsCount(Math.max(2, totalAdults));
+        setChildrenCount(totalKids);
+        setChildrenAges(allKidsAges);
+      }
+    }
+  }, [activeSelectionTab, perRoomAllocations, selectedRoomsList]);
+
+  // Reset / Sync custom occupancy mappings when booking modal opens/closes
   useEffect(() => {
     if (isBookingOpen) {
       setActiveSelectionTab('smart');
-      // Initialize roomAdultsCount and roomKidsCount based on initial selection
-      const nextAdults: Record<string, number> = {};
-      const nextKids: Record<string, number> = {};
-      const nextKidsAges: Record<string, number[]> = {};
-      rooms.forEach(r => {
-        const count = selectedRoomsList.filter(x => x.id === r.id).length;
-        if (count > 0) {
-          nextAdults[r.id] = count * 2;
-          nextKids[r.id] = 0;
-          nextKidsAges[r.id] = [];
-        }
-      });
-      setRoomAdultsCount(nextAdults);
-      setRoomKidsCount(nextKids);
-      setRoomKidsAges(nextKidsAges);
+      if (selectedRoomsList.length > 0) {
+        const initialMap: Record<string, Array<{ id: string; adults: number; kids: number; childAges: number[] }>> = {};
+        rooms.forEach(r => {
+          const count = selectedRoomsList.filter(x => x.id === r.id).length;
+          if (count > 0) {
+            initialMap[r.id] = Array.from({ length: count }, (_, idx) => ({
+              id: `${r.id}-${idx}`,
+              adults: 2,
+              kids: 0,
+              childAges: []
+            }));
+          }
+        });
+        setPerRoomAllocations(initialMap);
+      }
     } else {
       setSelectedRoomsList([]);
-      setRoomAdultsCount({});
-      setRoomKidsCount({});
-      setRoomKidsAges({});
+      setPerRoomAllocations({});
     }
   }, [isBookingOpen]);
 
@@ -532,74 +534,93 @@ export const OrganicTemplate: React.FC = () => {
     const r = rooms.find(x => x.id === roomId);
     if (!r) return;
 
+    const datesInfo = roomInventoryStatuses[roomId]?.datesInfo || [];
+    const minAvail = datesInfo.length > 0
+      ? datesInfo.reduce((min: number, item: any) => Math.min(min, item.avail), r.totalInventory || 10)
+      : (r.totalInventory || 10);
+
+    if (val > minAvail) {
+      alert(`Only ${minAvail} rooms of category "${r.name}" are available for your selected dates.`);
+      return;
+    }
+
     setSelectedRoomsList(prev => {
-      const currentOfCategory = prev.filter(x => x.id === roomId);
       const otherCategories = prev.filter(x => x.id !== roomId);
-      const nextCategoryRooms = [...currentOfCategory];
-      if (val > currentOfCategory.length) {
-        const diff = val - currentOfCategory.length;
-        for (let i = 0; i < diff; i++) {
-          nextCategoryRooms.push(r);
-        }
-      } else if (val < currentOfCategory.length) {
-        nextCategoryRooms.splice(val);
-      }
+      const nextCategoryRooms = Array.from({ length: val }, () => r);
       return [...otherCategories, ...nextCategoryRooms];
     });
 
-    if (val > 0) {
-      setRoomAdultsCount(prev => ({
+    setPerRoomAllocations(prev => {
+      const existing = prev[roomId] || [];
+      let nextList = [...existing];
+      if (val > existing.length) {
+        const diff = val - existing.length;
+        for (let i = 0; i < diff; i++) {
+          nextList.push({
+            id: `${roomId}-${Date.now()}-${existing.length + i}`,
+            adults: 2,
+            kids: 0,
+            childAges: []
+          });
+        }
+      } else if (val < existing.length) {
+        nextList = nextList.slice(0, val);
+      }
+      return {
         ...prev,
-        [roomId]: val * 2
-      }));
-      setRoomKidsCount(prev => ({
-        ...prev,
-        [roomId]: prev[roomId] || 0
-      }));
-      setRoomKidsAges(prev => ({
-        ...prev,
-        [roomId]: prev[roomId] || []
-      }));
-    } else {
-      setRoomAdultsCount(prev => {
-        const next = { ...prev };
-        delete next[roomId];
-        return next;
-      });
-      setRoomKidsCount(prev => {
-        const next = { ...prev };
-        delete next[roomId];
-        return next;
-      });
-      setRoomKidsAges(prev => {
-        const next = { ...prev };
-        delete next[roomId];
-        return next;
-      });
-    }
+        [roomId]: nextList
+      };
+    });
   };
 
-  const handleCustomRoomGuestsChange = (roomId: string, type: 'adults' | 'kids', val: number) => {
-    if (type === 'adults') {
-      setRoomAdultsCount(prev => ({ ...prev, [roomId]: val }));
-    } else {
-      setRoomKidsCount(prev => ({ ...prev, [roomId]: val }));
-      setRoomKidsAges(prev => {
-        const currentAges = prev[roomId] || [];
-        const nextAges = [...currentAges];
-        if (val > nextAges.length) {
-          for (let i = nextAges.length; i < val; i++) {
-            nextAges.push(8);
-          }
-        } else if (val < nextAges.length) {
-          nextAges.splice(val);
+  const handlePerRoomGuestChange = (
+    roomId: string,
+    rIdx: number,
+    field: 'adults' | 'kids' | 'childAge',
+    val: number,
+    childIdx?: number
+  ) => {
+    const room = rooms.find(r => r.id === roomId);
+    const maxCap = room?.capacityAdults || 4;
+
+    setPerRoomAllocations(prev => {
+      const currentList = prev[roomId] ? [...prev[roomId]] : [];
+      if (!currentList[rIdx]) return prev;
+
+      const targetRoom = { ...currentList[rIdx] };
+
+      if (field === 'adults') {
+        const newAdults = Math.max(2, Math.min(val, maxCap));
+        targetRoom.adults = newAdults;
+        if (newAdults + targetRoom.kids > maxCap) {
+          targetRoom.kids = Math.max(0, maxCap - newAdults);
+          targetRoom.childAges = targetRoom.childAges.slice(0, targetRoom.kids);
         }
-        return {
-          ...prev,
-          [roomId]: nextAges
-        };
-      });
-    }
+      } else if (field === 'kids') {
+        const maxKidsAllowed = Math.max(0, maxCap - targetRoom.adults);
+        const newKids = Math.max(0, Math.min(val, maxKidsAllowed));
+        targetRoom.kids = newKids;
+        const currentAges = [...targetRoom.childAges];
+        if (newKids > currentAges.length) {
+          for (let i = currentAges.length; i < newKids; i++) {
+            currentAges.push(8);
+          }
+        } else {
+          currentAges.splice(newKids);
+        }
+        targetRoom.childAges = currentAges;
+      } else if (field === 'childAge' && childIdx !== undefined) {
+        const currentAges = [...targetRoom.childAges];
+        currentAges[childIdx] = val;
+        targetRoom.childAges = currentAges;
+      }
+
+      currentList[rIdx] = targetRoom;
+      return {
+        ...prev,
+        [roomId]: currentList
+      };
+    });
   };
 
   useEffect(() => {
@@ -1888,16 +1909,24 @@ export const OrganicTemplate: React.FC = () => {
       </section>
     ),
     'bento-gallery': (
-      <section key="bento-gallery" className="bg-[#FAF6F0] py-4 border-t border-[#D8E2DC] relative">
-        <div className="max-w-7xl mx-auto text-center space-y-1.5 mb-6">
-          {/* <span className="text-[9px] text-[#8FA89B] tracking-[0.28em] uppercase font-medium block">(Portrait Diary)</span> */}
+      <section
+        key="bento-gallery"
+        id="gallery"
+        onClick={(e) => triggerEdit('media', e)}
+        className={`bg-[#FAF6F0] py-14 border-t border-[#D8E2DC] relative group transition cursor-pointer ${canvasMode === 'editor' ? 'hover:outline-2 hover:outline-dashed hover:outline-blue-500 hover:outline-offset-2' : ''}`}
+      >
+        {canvasMode === 'editor' && (
+          <span className="absolute top-4 right-4 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow z-40 border border-blue-400 font-sans">
+            ✏️ Edit Gallery
+          </span>
+        )}
+        <div className="max-w-7xl mx-auto text-center space-y-1.5 mb-8">
           <h3 className="text-[clamp(1.6rem,3.5vw,2.6rem)] font-medium text-[#3D405B] leading-[1.05]" style={{ fontFamily: "'Playfair Display', serif" }}>
             {hotelInfo.galleryTitle || "Natural Vignettes"}
           </h3>
         </div>
         <BentoGallery
           images={managedPhotos.length > 0 ? managedPhotos.map(p => p.url) : hotelInfo.heroImages}
-          scrollContainerRef={scrollContainerRef}
           onImageClick={() => setIsGalleryOpen(true)}
         />
       </section>
@@ -2358,7 +2387,10 @@ export const OrganicTemplate: React.FC = () => {
             </span>
           </div>
           {hotelInfo.instagramHandle ? (
-            <ImageReveal images={hotelInfo.instagramImages && hotelInfo.instagramImages.length >= 5 ? hotelInfo.instagramImages : instagramMock} />
+            <ImageReveal 
+              images={hotelInfo.instagramImages && hotelInfo.instagramImages.length >= 5 ? hotelInfo.instagramImages : instagramMock} 
+              handle={hotelInfo.instagramHandle}
+            />
           ) : (
             <div className="py-6 text-center text-xs text-zinc-400 bg-zinc-100/50 rounded-xl border border-zinc-200 font-medium">
               No Instagram handle configured. Click to add your Instagram ID in Contact settings.
@@ -3371,16 +3403,23 @@ export const OrganicTemplate: React.FC = () => {
                                 const count = selectedRoomsList.filter(r => r.id === room.id).length;
                                 const isSelectable = roomInventoryStatuses[room.id]?.selectable ?? true;
                                 const datesInfo = roomInventoryStatuses[room.id]?.datesInfo || [];
+                                const minAvail = datesInfo.length > 0
+                                  ? datesInfo.reduce((min: number, item: any) => Math.min(min, item.avail), room.totalInventory || 10)
+                                  : (room.totalInventory || 10);
+                                const isMaxInventoryReached = count >= minAvail;
 
-                                const roomAdults = roomAdultsCount[room.id] || count;
-                                const roomKids = roomKidsCount[room.id] || 0;
-                                const maxOccupancyLimit = count * (room.capacityAdults || 2);
+                                const roomAllocations = perRoomAllocations[room.id] || Array.from({ length: count }, (_, idx) => ({
+                                  id: `${room.id}-${idx}`,
+                                  adults: 2,
+                                  kids: 0,
+                                  childAges: []
+                                }));
 
                                 return (
                                   <div 
                                     key={room.id} 
                                     className={`p-3.5 rounded-2xl border transition text-left space-y-3.5 ${
-                                      !isSelectable 
+                                      !isSelectable || minAvail <= 0
                                         ? 'bg-zinc-50/50 border-zinc-200 opacity-60' 
                                         : count > 0 
                                         ? 'bg-[#EBF0EC]/30 border-[#8FA89B]' 
@@ -3401,10 +3440,15 @@ export const OrganicTemplate: React.FC = () => {
                                         <div className="min-w-0">
                                           <span className="font-extrabold text-[#3D405B] text-xs block uppercase truncate leading-tight">{room.name}</span>
                                           <span className="text-[10px] text-zinc-450 block font-extrabold tracking-wide uppercase mt-0.5">
-                                            BASE {room.base_occupancy || 0} · MIN {room.min_occupancy || 1} · MAX {room.capacityAdults || 2}
+                                            BASE {room.base_occupancy || 2} · MIN {room.min_occupancy || 1} · MAX {room.capacityAdults || 4}
                                           </span>
                                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
                                             <span className="text-[9.5px] text-[#E07A5F] font-bold">₹{room.basePrice.toLocaleString('en-IN')}/night</span>
+                                            {minAvail > 0 && (
+                                              <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">
+                                                Max {minAvail} avl
+                                              </span>
+                                            )}
                                           </div>
                                           <button
                                             type="button"
@@ -3436,7 +3480,7 @@ export const OrganicTemplate: React.FC = () => {
                                         <span className="w-3.5 text-center font-black text-xs text-zinc-850">{count}</span>
                                         <button
                                           type="button"
-                                          disabled={!isSelectable}
+                                          disabled={!isSelectable || isMaxInventoryReached}
                                           onClick={() => handleCustomRoomQuantityChange(room.id, count + 1)}
                                           className="w-7 h-7 rounded-full border border-zinc-200 bg-white hover:bg-zinc-150 flex items-center justify-center font-bold text-zinc-650 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                         >
@@ -3471,93 +3515,122 @@ export const OrganicTemplate: React.FC = () => {
                                       </div>
                                     )}
 
-                                    {/* Inline Guest Limit Controllers (Image 1 Ref) */}
+                                    {/* Per-Room Individual Guest Controllers Cards */}
                                     {count > 0 && (
-                                      <div className="pt-3 border-t border-dashed border-zinc-200 space-y-2.5 bg-[#FAF9F5]/40 p-2.5 rounded-xl border border-zinc-200/60 text-xs">
-                                        <span className="text-[9px] font-black text-zinc-455 uppercase tracking-wider block">
-                                          Configure guests in {room.name}:
+                                      <div className="pt-3 border-t border-dashed border-zinc-200 space-y-3">
+                                        <span className="text-[10px] font-black text-[#3D405B] uppercase tracking-wider block">
+                                          Configure guests for each room in {room.name}:
                                         </span>
-                                        <div className="grid grid-cols-2 gap-4">
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-bold text-zinc-650">Adults:</span>
-                                            <div className="flex items-center border border-zinc-250 bg-white rounded-lg overflow-hidden">
-                                              <button
-                                                type="button"
-                                                disabled={roomAdults <= count}
-                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'adults', roomAdults - 1)}
-                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-600 disabled:opacity-30 font-black cursor-pointer"
-                                              >
-                                                -
-                                              </button>
-                                              <span className="px-2 text-[10.5px] font-black font-mono">{roomAdults}</span>
-                                              <button
-                                                type="button"
-                                                disabled={roomAdults + roomKids >= maxOccupancyLimit}
-                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'adults', roomAdults + 1)}
-                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-650 disabled:opacity-30 font-black cursor-pointer"
-                                              >
-                                                +
-                                              </button>
-                                            </div>
-                                          </div>
-
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-bold text-zinc-650">Kids:</span>
-                                            <div className="flex items-center border border-zinc-250 bg-white rounded-lg overflow-hidden">
-                                              <button
-                                                type="button"
-                                                disabled={roomKids <= 0}
-                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'kids', roomKids - 1)}
-                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-600 disabled:opacity-30 font-black cursor-pointer"
-                                              >
-                                                -
-                                              </button>
-                                              <span className="px-2 text-[10.5px] font-black font-mono">{roomKids}</span>
-                                              <button
-                                                type="button"
-                                                disabled={roomAdults + roomKids >= maxOccupancyLimit}
-                                                onClick={() => handleCustomRoomGuestsChange(room.id, 'kids', roomKids + 1)}
-                                                className="px-2 py-0.5 hover:bg-zinc-100 text-zinc-650 disabled:opacity-30 font-black cursor-pointer"
-                                              >
-                                                +
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
                                         
-                                        {/* Child Ages specifiers (when kids count > 0) */}
-                                        {roomKids > 0 && (
-                                          <div className="space-y-1.5 pt-2.5 border-t border-dashed border-zinc-200">
-                                            <span className="text-[9.5px] font-extrabold uppercase block font-sans tracking-wide">Specify Child Ages:</span>
-                                            <div className="grid grid-cols-3 gap-2">
-                                              {(roomKidsAges[room.id] || Array(roomKids).fill(8)).map((age, idx) => (
-                                                <div key={idx} className="space-y-1">
-                                                  <label className="text-[8.5px] text-zinc-400 font-bold block uppercase">Child {idx + 1}</label>
-                                                  <select
-                                                    value={age}
-                                                    onChange={(e) => {
-                                                      const currentAges = [...(roomKidsAges[room.id] || Array(roomKids).fill(8))];
-                                                      currentAges[idx] = Number(e.target.value);
-                                                      setRoomKidsAges(prev => ({
-                                                        ...prev,
-                                                        [room.id]: currentAges
-                                                      }));
-                                                    }}
-                                                    className="w-full bg-white border border-zinc-200 rounded-lg px-1.5 py-0.5 text-[10px] font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
-                                                  >
-                                                    {[...Array(maxAge + 1)].map((_, a) => (
-                                                      <option key={a} value={a}>{a} yrs</option>
-                                                    ))}
-                                                  </select>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
+                                        <div className="space-y-3">
+                                          {roomAllocations.map((roomConfig, rIdx) => {
+                                            const rAdults = roomConfig.adults || 2;
+                                            const rKids = roomConfig.kids || 0;
+                                            const rAges = roomConfig.childAges || [];
+                                            const maxCap = room.capacityAdults || 4;
 
-                                        <p className="text-[9px] text-zinc-400 font-semibold text-right">
-                                          Total occupancy limit (Adults + Kids): max {maxOccupancyLimit}
-                                        </p>
+                                            return (
+                                              <div 
+                                                key={roomConfig.id || rIdx}
+                                                className="bg-[#FAF9F5] p-3 rounded-xl border border-zinc-200/80 space-y-2.5 text-xs"
+                                              >
+                                                <div className="flex items-center justify-between border-b border-zinc-200/60 pb-1.5">
+                                                  <span className="font-extrabold text-[#3D405B] text-[11px] uppercase tracking-wide">
+                                                    Room {rIdx + 1}
+                                                  </span>
+                                                  <span className="text-[9.5px] text-zinc-450 font-bold">
+                                                    Max {maxCap} guests
+                                                  </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-3">
+                                                  {/* Adults counter for Room rIdx + 1 */}
+                                                  <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-zinc-200">
+                                                    <span className="font-bold text-zinc-700 text-[11px]">Adults:</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                      <button
+                                                        type="button"
+                                                        disabled={rAdults <= 2}
+                                                        onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'adults', rAdults - 1)}
+                                                        className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
+                                                      >
+                                                        -
+                                                      </button>
+                                                      <span className="w-4 text-center font-black text-xs font-mono">{rAdults}</span>
+                                                      <button
+                                                        type="button"
+                                                        disabled={rAdults >= maxCap}
+                                                        onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'adults', rAdults + 1)}
+                                                        className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
+                                                      >
+                                                        +
+                                                      </button>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Kids counter for Room rIdx + 1 */}
+                                                  <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-zinc-200">
+                                                    <span className="font-bold text-zinc-700 text-[11px]">Children:</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                      <button
+                                                        type="button"
+                                                        disabled={rKids <= 0}
+                                                        onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'kids', rKids - 1)}
+                                                        className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
+                                                      >
+                                                        -
+                                                      </button>
+                                                      <span className="w-4 text-center font-black text-xs font-mono">{rKids}</span>
+                                                      <button
+                                                        type="button"
+                                                        disabled={rAdults + rKids >= maxCap}
+                                                        onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'kids', rKids + 1)}
+                                                        className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
+                                                      >
+                                                        +
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                </div>
+
+                                                {/* Child Age Selectors for Room rIdx + 1 */}
+                                                {rKids > 0 && (
+                                                  <div className="space-y-1.5 pt-2 border-t border-dashed border-zinc-200/80">
+                                                    <div className="flex items-center justify-between">
+                                                      <span className="text-[9.5px] font-extrabold uppercase text-zinc-600 tracking-wide">
+                                                        Child Ages in Room {rIdx + 1}:
+                                                      </span>
+                                                      <span className="text-[9px] text-[#E07A5F] font-bold">
+                                                        (Up to {maxAge} yrs)
+                                                      </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                      {Array.from({ length: rKids }).map((_, childIdx) => {
+                                                        const kidAge = rAges[childIdx] ?? 8;
+                                                        return (
+                                                          <div key={childIdx} className="space-y-0.5">
+                                                            <label className="text-[8px] text-zinc-400 font-bold block uppercase">
+                                                              Child {childIdx + 1} Age
+                                                            </label>
+                                                            <select
+                                                              value={kidAge}
+                                                              onChange={(e) => handlePerRoomGuestChange(room.id, rIdx, 'childAge', Number(e.target.value), childIdx)}
+                                                              className="w-full bg-white border border-zinc-200 rounded-lg px-1.5 py-0.5 text-[10px] font-extrabold text-zinc-800 outline-none focus:border-blue-400 transition"
+                                                            >
+                                                              {[...Array(maxAge + 1)].map((_, a) => (
+                                                                <option key={a} value={a}>{a} yrs</option>
+                                                              ))}
+                                                            </select>
+                                                          </div>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
                                     )}
                                   </div>

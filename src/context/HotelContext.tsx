@@ -1000,6 +1000,19 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     instagramImages: s.instagram_images || [],
   });
 
+  // Dynamic Browser Favicon Live Sync Effect
+  useEffect(() => {
+    if (hotelInfo.faviconUrl) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'shortcut icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = hotelInfo.faviconUrl;
+    }
+  }, [hotelInfo.faviconUrl]);
+
   // Helper: build hotel_settings upsert payload from HotelInfo state
   const buildHotelSettingsPayload = (info: HotelInfo, pid: string) => ({
     property_id: pid,
@@ -1297,6 +1310,37 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } else {
           setEvents([]);
         }
+
+        // Reconstruct pricing state map from pricingData & room rate_overrides
+        const newPricingMap: Record<string, Record<string, PricingOverride>> = {};
+        if (pricingData && pricingData.length > 0) {
+          pricingData.forEach((po: any) => {
+            if (!newPricingMap[po.room_id]) newPricingMap[po.room_id] = {};
+            newPricingMap[po.room_id][po.date] = {
+              date: po.date,
+              price: Number(po.price || 0),
+              isBlocked: !!po.is_blocked,
+            };
+          });
+        }
+        if (roomsData && roomsData.length > 0) {
+          roomsData.forEach((r: any) => {
+            if (r.rate_overrides) {
+              if (!newPricingMap[r.id]) newPricingMap[r.id] = {};
+              Object.entries(r.rate_overrides).forEach(([dateStr, rates]: [string, any]) => {
+                const firstPrice = typeof rates === 'object' ? Object.values(rates)[0] : rates;
+                if (firstPrice) {
+                  newPricingMap[r.id][dateStr] = {
+                    date: dateStr,
+                    price: Number(firstPrice),
+                    isBlocked: newPricingMap[r.id]?.[dateStr]?.isBlocked ?? false,
+                  };
+                }
+              });
+            }
+          });
+        }
+        setPricing(newPricingMap);
 
         if (pricingData && pricingData.length > 0) {
           const mappedPricing: RoomPricing = {};
