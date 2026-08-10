@@ -326,27 +326,74 @@ export const CustomPageRenderer: React.FC<CustomPageRendererProps> = ({ page }) 
           </div>
         )}
 
-        {/* Preset 5: Pool Amenities */}
+        {/* Preset 5: Pool & Spa */}
         {page.type === 'pool' && (
           <div className="space-y-6 max-w-2xl">
             <h2 className="text-xs font-bold text-[#3D405B] uppercase tracking-widest border-b border-[#D8E2DC] pb-2.5">
-              Clay Infinity Pool Info
+              🏊 Pool & Wellness
             </h2>
-            <div className="bg-white border border-[#D8E2DC] p-6 rounded-2xl shadow-xs space-y-4 leading-relaxed text-4xs">
-              <p className="text-zinc-600">
-                Lined with locally sourced natural organic clay tiles, our temperature-regulated infinity pool blends seamlessly with the valley tree line.
-              </p>
-              <div className="pt-3 border-t border-zinc-100 space-y-2 text-[#3D405B] font-semibold">
-                <h4 className="uppercase font-bold tracking-wide">Operational Guidelines:</h4>
-                <ul className="list-disc pl-5 space-y-1.5 font-normal text-zinc-550 text-5xs">
-                  <li>Pool Timings: 06:00 AM - 08:00 PM daily.</li>
-                  <li>Proper swimwear is mandatory.</li>
-                  <li>Glass containers and food are strictly prohibited on the pool deck.</li>
-                  <li>Guests must shower before entering the pool.</li>
-                  <li>No lifeguard is on duty; children under 12 must have adult supervision.</li>
-                </ul>
+
+            {/* Timings banner */}
+            {page.poolTimings && (
+              <div className="bg-[#E6F4F6] border border-[#1B93A4]/30 rounded-2xl p-4 flex items-center gap-3">
+                <div className="text-2xl">🕐</div>
+                <div>
+                  <p className="text-[9px] text-[#1B93A4] font-extrabold uppercase tracking-wider">Open Hours</p>
+                  <p className="text-4xs font-bold text-[#3D405B]">{page.poolTimings}</p>
+                </div>
               </div>
+            )}
+
+            {/* Features */}
+            {page.poolFeatures && page.poolFeatures.length > 0 && (
+              <div className="bg-white border border-[#D8E2DC] p-5 rounded-2xl shadow-xs space-y-3">
+                <h4 className="text-[10px] font-extrabold text-[#3D405B] uppercase tracking-wider">Amenities & Guidelines</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {page.poolFeatures.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-4xs font-semibold text-zinc-700">
+                      <CheckCircle className="w-4 h-4 text-[#1B93A4] shrink-0" />
+                      <span>{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Preset 6: Places to Visit */}
+        {page.type === 'places' && (
+          <div className="space-y-8">
+            <h2 className="text-xs font-bold text-[#3D405B] uppercase tracking-widest border-b border-[#D8E2DC] pb-2.5">
+              🗺️ Nearby Places & Attractions
+            </h2>
+
+            <div className="space-y-4">
+              {page.placesList?.map((place, i) => (
+                <div key={i} className="bg-white border border-[#D8E2DC] p-4 rounded-2xl flex flex-col sm:flex-row gap-4 shadow-xs hover:border-[#3D405B]/30 transition">
+                  <div className="w-full sm:w-36 h-28 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-[#D8E2DC]">
+                    <img
+                      src={place.image || 'https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&q=80&w=300'}
+                      alt={place.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 flex flex-col justify-between text-left space-y-2">
+                    <div className="space-y-1">
+                      {place.distance && (
+                        <span className="text-[9px] text-[#E07A5F] font-extrabold uppercase tracking-wider">📍 {place.distance}</span>
+                      )}
+                      <h4 className="text-4xs font-bold text-[#3D405B] uppercase">{place.name}</h4>
+                      <p className="text-[10px] text-zinc-500 leading-relaxed">{place.description}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
+
+            {(!page.placesList || page.placesList.length === 0) && (
+              <p className="text-5xs text-zinc-400 italic">No places listed yet.</p>
+            )}
           </div>
         )}
 

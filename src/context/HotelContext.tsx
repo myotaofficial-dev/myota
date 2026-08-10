@@ -239,7 +239,7 @@ export interface CustomPage {
   slug: string;
   content: string;
   active: boolean;
-  type?: 'blog' | 'restaurant' | 'pool' | 'banquet' | 'activities' | 'custom';
+  type?: 'blog' | 'restaurant' | 'pool' | 'banquet' | 'activities' | 'places' | 'custom';
   bannerImage?: string;
   tagline?: string;
   restaurantMenu?: { name: string; price: number; description: string; photo?: string }[];
@@ -247,7 +247,11 @@ export interface CustomPage {
   banquetFeatures?: string[];
   blogPosts?: { title: string; date: string; readTime: string; content: string; image?: string }[];
   activitiesList?: { title: string; time: string; description: string; image?: string }[];
+  placesList?: { name: string; distance: string; description: string; image?: string }[];
+  poolFeatures?: string[];
+  poolTimings?: string;
 }
+
 
 export interface EventSlot {
   id: string;
