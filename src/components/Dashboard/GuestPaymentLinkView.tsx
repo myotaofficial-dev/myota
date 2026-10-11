@@ -35,50 +35,93 @@ export const GuestPaymentLinkView: React.FC<GuestPaymentLinkViewProps> = ({ link
     setLoading(true);
     setError('');
     try {
-      // Find booking strictly by dedicated selected_slot token; do NOT allow ID enumeration
-      const { data, error: fetchErr } = await (supabase as any)
-        .from('bookings')
-        .select('*')
-        .eq('selected_slot', linkCode)
-        .single();
+      // 1. Primary: Query through secure RPC (works when RLS blocks direct anon table access)
+      const { data: rpcData, error: rpcErr } = await (supabase as any)
+        .rpc('get_booking_by_payment_token', { p_token: linkCode });
 
-      if (fetchErr || !data) {
-        // Safe backward-compatibility fallback only if token is valid formatted legacy code
-        const { data: legacyData, error: legacyErr } = await (supabase as any)
+      let loadedBooking: any = null;
+      if (!rpcErr && rpcData && rpcData.length > 0) {
+        const item = rpcData[0];
+        loadedBooking = {
+          id: item.booking_id,
+          property_id: item.property_id,
+          room_id: item.room_id,
+          room_name: item.room_name,
+          guest_name: item.guest_name,
+          guest_email: item.guest_email,
+          guest_phone: item.guest_phone,
+          check_in: item.check_in,
+          check_out: item.check_out,
+          total_price: Number(item.total_price),
+          payment_status: item.payment_status,
+          booking_status: item.booking_status,
+          paid_amount: Number(item.paid_amount || 0),
+          coupon_code: item.coupon_code,
+          selected_slot: item.selected_slot
+        };
+        if (item.property_name) {
+          setProperty({
+            name: item.property_name,
+            phone: item.property_phone,
+            email: item.property_email
+          });
+        }
+      }
+
+      // 2. Fallback: Table-level lookup if RPC not yet deployed or returned empty
+      if (!loadedBooking) {
+        const { data, error: fetchErr } = await (supabase as any)
           .from('bookings')
           .select('*')
-          .eq('id', linkCode)
+          .eq('selected_slot', linkCode)
           .single();
 
-        if (legacyErr || !legacyData) {
-          setError('Invalid or expired booking link. Please verify the link URL.');
-          setLoading(false);
-          return;
+        if (!fetchErr && data) {
+          loadedBooking = data;
+        } else {
+          const { data: legacyData, error: legacyErr } = await (supabase as any)
+            .from('bookings')
+            .select('*')
+            .eq('id', linkCode)
+            .single();
+
+          if (!legacyErr && legacyData) {
+            loadedBooking = legacyData;
+          }
         }
-        setBooking(legacyData);
-      } else {
-        setBooking(data);
       }
+
+      if (!loadedBooking) {
+        setError('Invalid or expired booking link. Please verify the link URL.');
+        setLoading(false);
+        return;
+      }
+
+      setBooking(loadedBooking);
 
       // Fetch matching room categories details for photos and amenities
-      const roomIds = data.room_id ? data.room_id.split(',') : [];
-      const { data: roomsData } = await (supabase as any)
-        .from('room_categories')
-        .select('*')
-        .in('id', roomIds);
-      if (roomsData) {
-        setRoomCategories(roomsData);
+      const roomIds = loadedBooking.room_id ? loadedBooking.room_id.split(',') : [];
+      if (roomIds.length > 0) {
+        const { data: roomsData } = await (supabase as any)
+          .from('room_categories')
+          .select('*')
+          .in('id', roomIds);
+        if (roomsData) {
+          setRoomCategories(roomsData);
+        }
       }
 
-      // Fetch property/hotel settings
-      const { data: propData } = await (supabase as any)
-        .from('hotel_settings')
-        .select('*')
-        .eq('property_id', (data as any).property_id)
-        .single();
+      // Fetch property/hotel settings if not already loaded from RPC
+      if (!property) {
+        const { data: propData } = await (supabase as any)
+          .from('hotel_settings')
+          .select('*')
+          .eq('property_id', loadedBooking.property_id)
+          .single();
 
-      if (propData) {
-        setProperty(propData);
+        if (propData) {
+          setProperty(propData);
+        }
       }
     } catch (err: any) {
       setError('Connection failed. Please reload the page.');
@@ -142,6 +185,19 @@ export const GuestPaymentLinkView: React.FC<GuestPaymentLinkViewProps> = ({ link
     const finalPaymentStatus = pricingDetails.payNow === pricingDetails.total ? 'paid' : 'partially_paid';
 
     try {
+      // 1. Primary: Secure settlement via RPC with token validation
+      const { data: rpcRes, error: rpcErr } = await (supabase as any)
+        .rpc('confirm_booking_payment_simulation', {
+          p_token: linkCode,
+          p_paid_amount: pricingDetails.payNow
+        });
+
+      if (!rpcErr && rpcRes && rpcRes.success) {
+        setPaymentStatus('success');
+        return;
+      }
+
+      // 2. Fallback: Table-level update if RPC is not yet applied
       const { error: updateErr } = await (supabase as any)
         .from('bookings')
         .update({
