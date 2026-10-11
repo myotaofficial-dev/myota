@@ -590,12 +590,9 @@ export const OrganicTemplate: React.FC = () => {
       const targetRoom = { ...currentList[rIdx] };
 
       if (field === 'adults') {
-        const newAdults = Math.max(2, Math.min(val, maxCap));
+        const maxAdultsAllowed = Math.max(1, maxCap - targetRoom.kids);
+        const newAdults = Math.max(1, Math.min(val, maxAdultsAllowed));
         targetRoom.adults = newAdults;
-        if (newAdults + targetRoom.kids > maxCap) {
-          targetRoom.kids = Math.max(0, maxCap - newAdults);
-          targetRoom.childAges = targetRoom.childAges.slice(0, targetRoom.kids);
-        }
       } else if (field === 'kids') {
         const maxKidsAllowed = Math.max(0, maxCap - targetRoom.adults);
         const newKids = Math.max(0, Math.min(val, maxKidsAllowed));
@@ -636,7 +633,7 @@ export const OrganicTemplate: React.FC = () => {
 
   useEffect(() => {
     if (isBookingOpen) {
-      if (selectedRoomsList.length === 0 && selectedRoomId) {
+      if (activeSelectionTab === 'smart' && selectedRoomsList.length === 0 && selectedRoomId) {
         const r = rooms.find(room => room.id === selectedRoomId);
         if (r) {
           setSelectedRoomsList([r]);
@@ -645,7 +642,7 @@ export const OrganicTemplate: React.FC = () => {
     } else {
       setSelectedRoomsList([]);
     }
-  }, [isBookingOpen, selectedRoomId, rooms]);
+  }, [isBookingOpen, selectedRoomId, rooms, activeSelectionTab]);
 
   const selectedEvent = guestEvents.find(e => e.id === selectedEventId);
 
@@ -735,11 +732,80 @@ export const OrganicTemplate: React.FC = () => {
 
   const [comboValidationError, setComboValidationError] = useState<string | null>(null);
 
+  const calculateSingleRoomStayPrice = (room: any, rAdults: number, rKids: number, skipOffers?: boolean) => {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const nights = differenceInDays(end, start);
+    if (isNaN(nights) || nights <= 0) return 0;
+
+    const roomPricing = pricing[room.id] || {};
+    const baseOcc = room.base_occupancy || room.capacityAdults || 2;
+
+    const baseAdults = Math.min(rAdults, baseOcc);
+    const baseChildren = Math.min(rKids, Math.max(0, baseOcc - baseAdults));
+    const baseGuests = baseAdults + baseChildren;
+
+    const extraAdults = Math.max(0, rAdults - baseAdults);
+    const extraChildren = Math.max(0, rKids - baseChildren);
+
+    const baseRate = getRoomPriceForGuests(room, baseGuests);
+    const extraAdultRate = hotelInfo.extraAdultRate ?? 0;
+    const extraChildRate = hotelInfo.extraChildRate ?? 0;
+
+    const isCpBase = hotelInfo.defaultMealPlan === 'CP';
+    const cpAdultRate = isCpBase ? (hotelInfo.mealPlanCpAdultRate ?? 300) : 0;
+    const cpChildRate = isCpBase ? (hotelInfo.mealPlanCpChildRate ?? 250) : 0;
+
+    const cpCostPerNight = (rAdults * cpAdultRate) + (rKids * cpChildRate);
+    const extraCostPerNight = (extraAdults * extraAdultRate) + (extraChildren * extraChildRate);
+
+    let total = 0;
+    for (let i = 0; i < nights; i++) {
+      const dateStr = format(addDays(start, i), 'yyyy-MM-dd');
+      const override = roomPricing[dateStr];
+      const dayBasePrice = override && override.price > 0 ? override.price : baseRate;
+
+      let dayCost = dayBasePrice + extraCostPerNight + cpCostPerNight;
+
+      if (!skipOffers) {
+        const activeOffers = (hotelInfo.offers || []).filter(
+          (o: any) => o.dates.includes(dateStr) && (o.roomIds || []).includes(room.id)
+        );
+        activeOffers.forEach((offer: any) => {
+          if (offer.discountType === 'percent') {
+            dayCost = dayCost * (1 - offer.discountValue / 100);
+          } else {
+            dayCost = Math.max(0, dayCost - offer.discountValue);
+          }
+        });
+      }
+
+      total += Math.round(dayCost);
+    }
+    return total;
+  };
+
   const calculateAllRoomsStayPrice = (roomList: any[], effAdults: number, effChildren: number, skipOffers?: boolean) => {
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     const nights = differenceInDays(end, start);
     if (isNaN(nights) || nights <= 0) return 0;
+
+    if (activeSelectionTab === 'custom') {
+      let total = 0;
+      Object.entries(perRoomAllocations).forEach(([roomId, configs]) => {
+        const isSelected = roomList.some(r => r.id === roomId);
+        if (isSelected && configs && configs.length > 0) {
+          const r = roomList.find(x => x.id === roomId);
+          if (r) {
+            configs.forEach(cfg => {
+              total += calculateSingleRoomStayPrice(r, cfg.adults || 2, cfg.kids || 0, skipOffers);
+            });
+          }
+        }
+      });
+      return total;
+    }
 
     const distribution = distributeAdultsAndChildren(roomList, effAdults, effChildren);
     
@@ -881,28 +947,6 @@ export const OrganicTemplate: React.FC = () => {
       };
     }
 
-    if (selectedRooms.length <= 1) return null;
-    
-    // Sort selected rooms by capacityAdults descending
-    const sortedRooms = [...selectedRooms].sort((a, b) => {
-      const capA = a.capacityAdults || 2;
-      const capB = b.capacityAdults || 2;
-      return capB - capA;
-    });
-
-    // Check if we can accommodate the group with fewer rooms
-    for (let k = 1; k < selectedRooms.length; k++) {
-      // Take the k largest rooms
-      const subRooms = sortedRooms.slice(0, k);
-      const combinedAdultsCap = subRooms.reduce((sum, r) => sum + (r.capacityAdults || 2), 0);
-      
-      if (combinedAdultsCap >= (adults + children)) {
-        return {
-          enoughRoomsCount: k,
-          message: `You have selected too many rooms. Minimum ${k} room${k > 1 ? 's are' : ' is'} enough for your group.`
-        };
-      }
-    }
     return null;
   };
 
@@ -1026,6 +1070,8 @@ export const OrganicTemplate: React.FC = () => {
 
   const getSmartRecommendations = () => {
     const totalRequired = adultsCount + childrenCount;
+    if (totalRequired > 15) return [];
+
     const recommendations: Array<{
       type: 'single' | 'combo';
       rooms: any[];
@@ -3209,7 +3255,11 @@ export const OrganicTemplate: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setActiveSelectionTab('custom')}
+                          onClick={() => {
+                            setActiveSelectionTab('custom');
+                            setSelectedRoomsList([]);
+                            setPerRoomAllocations({});
+                          }}
                           className={`py-2 px-3 rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all duration-205 cursor-pointer text-center ${
                             activeSelectionTab === 'custom'
                               ? 'bg-[#3D405B] text-white shadow-xs'
@@ -3241,7 +3291,7 @@ export const OrganicTemplate: React.FC = () => {
                                 <span className="w-5 text-center font-black text-sm text-[#3D405B]">{adultsCount}</span>
                                 <button
                                   type="button"
-                                  onClick={() => setAdultsCount(prev => Math.min(10, prev + 1))}
+                                  onClick={() => setAdultsCount(prev => Math.min(15, prev + 1))}
                                   className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                                 >
                                   +
@@ -3266,7 +3316,7 @@ export const OrganicTemplate: React.FC = () => {
                                 <span className="w-5 text-center font-black text-sm text-[#3D405B]">{childrenCount}</span>
                                 <button
                                   type="button"
-                                  onClick={() => handleChildrenCountChange(Math.min(5, childrenCount + 1))}
+                                  onClick={() => handleChildrenCountChange(Math.min(15, childrenCount + 1))}
                                   className="w-7 h-7 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center font-bold text-zinc-650 hover:bg-[#E8E2D6] cursor-pointer text-sm transition"
                                 >
                                   +
@@ -3305,7 +3355,28 @@ export const OrganicTemplate: React.FC = () => {
                           {/* Smart Recommendations Section */}
                           <div className="space-y-2 animate-in fade-in duration-300">
                             <span className="text-[10.5px] text-zinc-550 font-extrabold uppercase tracking-wider block">Smart Suite Recommendations</span>
-                            {recommendations.length === 0 ? (
+                            {adultsCount + childrenCount > 15 ? (
+                              <div className="bg-amber-50/90 border border-amber-200 p-4 rounded-2xl text-center space-y-2.5 my-2">
+                                <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto text-base font-black">
+                                  💡
+                                </div>
+                                <h4 className="font-extrabold text-amber-900 text-xs uppercase tracking-wide">For Groups Above 15 Guests</h4>
+                                <p className="text-[11.5px] text-amber-800 leading-snug">
+                                  Smart recommendations are available for up to 15 guests ({adultsCount + childrenCount} guests selected). Please use <strong>Make Your Own Combo</strong> to build a custom room package for your group.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveSelectionTab('custom');
+                                    setSelectedRoomsList([]);
+                                    setPerRoomAllocations({});
+                                  }}
+                                  className="px-4 py-2 bg-[#3D405B] hover:bg-[#2d304a] text-white font-bold text-[11px] uppercase tracking-wider rounded-xl transition cursor-pointer shadow-xs"
+                                >
+                                  Recommend: Make Your Own Combo
+                                </button>
+                              </div>
+                            ) : recommendations.length === 0 ? (
                               <p className="text-[11px] text-rose-500 font-bold text-center py-4 bg-rose-50/30 border border-rose-200/50 rounded-2xl">No matches fit your group size. Try another date or custom configuration.</p>
                             ) : (
                               <div className="space-y-2">
@@ -3415,6 +3486,8 @@ export const OrganicTemplate: React.FC = () => {
                                   childAges: []
                                 }));
 
+                                const categorySubtotal = roomAllocations.reduce((sum, cfg) => sum + calculateSingleRoomStayPrice(room, cfg.adults || 2, cfg.kids || 0), 0);
+
                                 return (
                                   <div 
                                     key={room.id} 
@@ -3450,6 +3523,11 @@ export const OrganicTemplate: React.FC = () => {
                                               </span>
                                             )}
                                           </div>
+                                          {count > 0 && (
+                                            <div className="mt-1">
+                                              <span className="text-[9.5px] font-black text-[#9E2A2B]">Room tariff: ₹{categorySubtotal.toLocaleString('en-IN')}</span>
+                                            </div>
+                                          )}
                                           <button
                                             type="button"
                                             onClick={() => setPopoverCombo({
@@ -3528,6 +3606,7 @@ export const OrganicTemplate: React.FC = () => {
                                             const rKids = roomConfig.kids || 0;
                                             const rAges = roomConfig.childAges || [];
                                             const maxCap = room.capacityAdults || 4;
+                                            const singleTariff = calculateSingleRoomStayPrice(room, rAdults, rKids);
 
                                             return (
                                               <div 
@@ -3550,7 +3629,7 @@ export const OrganicTemplate: React.FC = () => {
                                                     <div className="flex items-center gap-1.5">
                                                       <button
                                                         type="button"
-                                                        disabled={rAdults <= 2}
+                                                        disabled={rAdults <= 1}
                                                         onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'adults', rAdults - 1)}
                                                         className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
                                                       >
@@ -3559,7 +3638,7 @@ export const OrganicTemplate: React.FC = () => {
                                                       <span className="w-4 text-center font-black text-xs font-mono">{rAdults}</span>
                                                       <button
                                                         type="button"
-                                                        disabled={rAdults >= maxCap}
+                                                        disabled={rAdults + rKids >= maxCap}
                                                         onClick={() => handlePerRoomGuestChange(room.id, rIdx, 'adults', rAdults + 1)}
                                                         className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-700 font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs"
                                                       >
@@ -3627,6 +3706,16 @@ export const OrganicTemplate: React.FC = () => {
                                                     </div>
                                                   </div>
                                                 )}
+
+                                                {/* Room Tariff directly shown for each room config */}
+                                                <div className="flex items-center justify-between pt-1.5 border-t border-zinc-200/60">
+                                                  <span className="text-[10px] font-bold text-zinc-500">
+                                                    Occupancy: {rAdults + rKids} guest{rAdults + rKids > 1 ? 's' : ''}
+                                                  </span>
+                                                  <span className="text-xs font-black text-[#9E2A2B]">
+                                                    Room tariff: ₹{singleTariff.toLocaleString('en-IN')}
+                                                  </span>
+                                                </div>
                                               </div>
                                             );
                                           })}
@@ -3651,6 +3740,28 @@ export const OrganicTemplate: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          const totalRooms = currentSelectedRooms.length;
+                          let totalAdults = adultsCount;
+                          let totalChildren = childrenCount;
+
+                          if (activeSelectionTab === 'custom') {
+                            let sumAdults = 0;
+                            let sumKids = 0;
+                            Object.entries(perRoomAllocations).forEach(([roomId, roomConfigs]) => {
+                              const isSelected = selectedRoomsList.some(x => x.id === roomId);
+                              if (isSelected && roomConfigs && roomConfigs.length > 0) {
+                                roomConfigs.forEach(rc => {
+                                  sumAdults += (rc.adults || 0);
+                                  sumKids += (rc.kids || 0);
+                                });
+                              }
+                            });
+                            totalAdults = sumAdults;
+                            totalChildren = sumKids;
+                          }
+
+                          alert(`You are booking for ${totalRooms} room${totalRooms > 1 ? 's' : ''}, total adults: ${totalAdults}, total children: ${totalChildren}`);
+
                           const policyEnabled = hotelInfo.childPolicyEnabled !== false;
                           const minAge = policyEnabled ? (hotelInfo.childPolicyMinAge ?? 5) : 5;
                           const maxAge = policyEnabled ? (hotelInfo.childPolicyMaxAge ?? 12) : 12;
@@ -3658,7 +3769,7 @@ export const OrganicTemplate: React.FC = () => {
                           const payingChildren = childrenAges.filter(age => age > minAge && age <= maxAge).length;
                           const adultChildren = childrenAges.filter(age => age > maxAge).length;
 
-                          const effAdults = adultsCount + adultChildren;
+                          const effAdults = totalAdults + adultChildren;
                           const effChildren = payingChildren;
 
                           const tooMany = checkTooManyRooms(currentSelectedRooms, effAdults, effChildren);

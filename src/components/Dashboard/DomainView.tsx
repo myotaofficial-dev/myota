@@ -590,28 +590,28 @@ export const DomainView: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
             Basic Info
           </h2>
-          <p className="text-sm text-[#78716C]">
+          <p className="text-xs sm:text-sm text-slate-500">
             Property branding, titles, logo marks, check-in schedules, and default configuration.
           </p>
         </div>
       </div>
 
       {/* Property Name + Website Headline */}
-      <div className="bg-white border border-[#E7E5E4] rounded-2xl p-6 shadow-xs space-y-6 text-left">
+      <div className="ds-card p-6 space-y-6 text-left">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-zinc-700">Property Name</label>
-            <p className="text-[10px] text-zinc-400">Internal property name. Keep it clear and searchable.</p>
+            <label className="text-xs font-bold text-slate-700">Property Name</label>
+            <p className="text-[11px] text-slate-500">Internal property name. Keep it clear and searchable.</p>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               className="ds-input w-full" />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-zinc-700">Website Headline</label>
-            <p className="text-[10px] text-zinc-400">Customer-facing property title used across the Bolt site.</p>
+            <label className="text-xs font-bold text-slate-700">Website Headline</label>
+            <p className="text-[11px] text-slate-500">Customer-facing property title used across the public site.</p>
             <input type="text" value={websiteHeadline} onChange={e => setWebsiteHeadline(e.target.value)}
               placeholder="e.g. The Grandlake Resorts : Kutty Kerala in Poolampatti"
               className="ds-input w-full" />

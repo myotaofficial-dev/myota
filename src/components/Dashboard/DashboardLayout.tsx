@@ -107,14 +107,14 @@ export const DashboardLayout: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-screen bg-[#F8FAFC] overflow-hidden text-zinc-800 animate-in fade-in duration-150">
 
-      {/* Top Editor Navigation Bar (Image 2) */}
-      <header className="bg-white border-b border-zinc-200 h-14 px-4 sm:px-6 flex items-center justify-between z-20 shrink-0 select-none">
+      {/* Top Editor Navigation Bar — Apple-inspired Glass Header */}
+      <header className="ds-glass sticky top-0 z-20 h-14 px-4 sm:px-6 flex items-center justify-between select-none">
 
         {/* Left Side: Back button, Mobile Menu button & Brand */}
         <div className="flex items-center gap-2 sm:gap-4">
           <button
             onClick={() => setAppMode('dashboard')}
-            className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-950 transition cursor-pointer"
+            className="p-1.5 hover:bg-black/5 rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
             title="Back to Platform Dashboard"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
@@ -122,19 +122,19 @@ export const DashboardLayout: React.FC = () => {
 
           <button
             onClick={() => setIsEditorSidebarOpen(true)}
-            className="lg:hidden p-1.5 hover:bg-[#FAFAF9] rounded-lg text-zinc-650 border border-zinc-250 transition"
+            className="lg:hidden p-1.5 hover:bg-black/5 rounded-lg text-slate-600 border border-slate-200 transition"
             title="Open Editor Menu"
           >
             <Menu className="w-4 h-4" />
           </button>
 
-          <div className="hidden sm:flex items-center gap-2 border-l border-[#E7E5E4] pl-4">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white font-bold" style={{ background: 'var(--ds-primary)' }}>
+          <div className="hidden sm:flex items-center gap-2.5 border-l border-slate-200 pl-4">
+            <div className="w-6.5 h-6.5 rounded-lg flex items-center justify-center text-white font-bold shadow-xs" style={{ background: 'var(--ds-primary)' }}>
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
               </svg>
             </div>
-            <h1 className="font-extrabold text-xs text-[#1C1917] tracking-widest uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>MyOTA Editor</h1>
+            <h1 className="font-bold text-xs text-slate-900 tracking-wider uppercase">MYOTA Editor</h1>
           </div>
         </div>
 
@@ -144,16 +144,16 @@ export const DashboardLayout: React.FC = () => {
           <select
             value={selectedTheme}
             onChange={(e) => setSelectedTheme(e.target.value)}
-            className="hidden md:block bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2.5 py-1 text-4xs font-bold uppercase tracking-wider text-[#78716C] outline-hidden focus:border-[#1B93A4] cursor-pointer"
+            className="hidden md:block bg-white/70 border border-slate-200/80 rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 outline-none focus:border-sky-500 cursor-pointer shadow-xs"
           >
-            <option value="THEME: ORGANIC NATURAL">Theme: Organic/Natural</option>
+            <option value="THEME: ORGANIC NATURAL">Theme: Organic Natural</option>
           </select>
 
           {/* Property Dropdown */}
           <select
             value={activePropertyId}
             onChange={(e) => handlePropertyChange(e.target.value)}
-            className="bg-[#FAFAF9] border border-[#E7E5E4] rounded-lg px-2 sm:px-3 py-1 text-xs text-[#1C1917] font-bold outline-hidden focus:border-[#1B93A4] cursor-pointer max-w-[120px] sm:max-w-none"
+            className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 sm:px-3 py-1 text-xs text-slate-900 font-bold outline-none focus:border-sky-500 cursor-pointer shadow-xs max-w-[140px] sm:max-w-none"
           >
             {propertiesList.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -165,17 +165,17 @@ export const DashboardLayout: React.FC = () => {
         <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Publish Alerts */}
           {publishSuccess && (
-            <div className="hidden xl:flex items-center gap-1 px-2.5 py-1 bg-[#E8F5EF] border border-[#2D6A4F] text-[#2D6A4F] text-3xs font-semibold rounded-lg animate-in fade-in duration-200">
-              <Check className="w-3.5 h-3.5 text-[#2D6A4F] font-bold" />
+            <div className="hidden xl:flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-semibold rounded-lg animate-in fade-in duration-200 shadow-xs">
+              <Check className="w-3.5 h-3.5 text-emerald-600 font-bold" />
               <span>Site published live!</span>
             </div>
           )}
 
           {editorFocus === 'form' ? (
-            /* Back to Preview Button (Image 2 style) */
+            /* Back to Preview Button */
             <button
               onClick={() => setEditorFocus('canvas')}
-              className="flex items-center gap-1.5 bg-white border border-[#E7E5E4] hover:bg-[#FAFAF9] text-[#78716C] font-bold text-xs px-2.5 sm:px-3.5 py-1.5 rounded-lg transition shadow-3xs cursor-pointer"
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs px-2.5 sm:px-3.5 py-1.5 rounded-lg transition shadow-xs cursor-pointer active:scale-98"
             >
               <span className="hidden sm:inline">← Back to Preview</span>
               <span className="sm:hidden">← Preview</span>
@@ -187,9 +187,9 @@ export const DashboardLayout: React.FC = () => {
                 const sub = hotelInfo?.subdomain || 'grandlake';
                 window.open(`/?preview=${sub}`, '_blank');
               }}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer bg-white border-[#E7E5E4] text-[#78716C] hover:bg-[#FAFAF9]"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs active:scale-98"
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-3.5 h-3.5 text-slate-500" />
               <span className="hidden sm:inline">Preview</span>
             </button>
           )}
@@ -197,7 +197,7 @@ export const DashboardLayout: React.FC = () => {
           {/* Publish */}
           <button
             onClick={handlePublish}
-            className="flex items-center gap-1.5 text-white font-bold text-xs px-3 sm:px-4 py-1.5 rounded-lg transition shadow-xs cursor-pointer ds-btn-primary"
+            className="flex items-center gap-1.5 text-white font-bold text-xs px-3 sm:px-4 py-1.5 rounded-lg transition cursor-pointer ds-btn-primary"
           >
             <Send className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Publish Site</span>

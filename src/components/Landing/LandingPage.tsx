@@ -63,26 +63,26 @@ export const LandingPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#1C1917] font-sans antialiased selection:bg-[#1B93A4]/15 selection:text-[#1B93A4]">
-      {/* ── Navbar ────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-[#FAF9F6]/80 backdrop-blur-lg border-b border-zinc-200/60 transition-all">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased selection:bg-sky-500/15 selection:text-sky-600">
+      {/* ── Navbar — Apple-inspired Glass Surface ──────────────────────────────── */}
+      <header className="sticky top-0 z-40 ds-glass transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-18 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-md" style={{ background: '#1B93A4' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-xs" style={{ background: 'var(--ds-primary)' }}>
               <svg className="w-4.5 h-4.5 fill-current" viewBox="0 0 24 24">
                 <path d="M19 11h-6V3l-7 10h6v8l7-10z" />
               </svg>
             </div>
-            <span className="font-black text-xl tracking-tight text-zinc-900" style={{ fontFamily: 'Outfit, sans-serif' }}>
-              Myota
+            <span className="font-bold text-xl tracking-tight text-slate-900">
+              MYOTA
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-8 text-[11px] font-bold uppercase tracking-widest text-[#78716C]">
-            <a href="#ecosystem" className="hover:text-[#1B93A4] transition-colors">Product</a>
-            <a href="#WhatsApp" className="hover:text-[#1B93A4] transition-colors">WhatsApp Tools</a>
-            <a href="#pricing" className="hover:text-[#1B93A4] transition-colors">Pricing</a>
-            <a href="#faqs" className="hover:text-[#1B93A4] transition-colors">FAQs</a>
+          <nav className="hidden md:flex items-center gap-8 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+            <a href="#ecosystem" className="hover:text-sky-600 transition-colors">Product</a>
+            <a href="#WhatsApp" className="hover:text-sky-600 transition-colors">WhatsApp Tools</a>
+            <a href="#pricing" className="hover:text-sky-600 transition-colors">Pricing</a>
+            <a href="#faqs" className="hover:text-sky-600 transition-colors">FAQs</a>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-4">
@@ -91,14 +91,13 @@ export const LandingPage: React.FC = () => {
                 localStorage.setItem('myota_onboarding_mode', 'signin');
                 setAppMode('onboarding');
               }}
-              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
             >
               Sign In
             </button>
             <button
               onClick={() => setAppMode('onboarding')}
-              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-white transition-all hover:scale-[1.02] active:scale-95 shadow-md cursor-pointer"
-              style={{ background: '#1C1917' }}
+              className="text-xs font-bold uppercase tracking-wider px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl text-white transition-all hover:scale-[1.02] active:scale-98 shadow-xs cursor-pointer ds-btn-primary"
             >
               Get Started
             </button>

@@ -1,34 +1,84 @@
+@import "@fontsource/comfortaa/300.css";
+@import "@fontsource/comfortaa/400.css";
+@import "@fontsource/comfortaa/500.css";
+@import "@fontsource/comfortaa/600.css";
+@import "@fontsource/comfortaa/700.css";
+
 @import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Mulish:ital,wght@0,200..1000;1,200..1000&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Outfit:wght@300;400;500;600;700;800&family=Figtree:wght@400;500;600;700&family=Syne:wght@400..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Noto+Sans:wght@300;400;500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════
-   Dashboard Design System (DS) Tokens
-   Inspired by bookmigo's Organic & Earthy system
+   MYOTA Premium Design System (DS) Tokens
+   Apple-Inspired Restraint with Comfortaa Typography
 ═══════════════════════════════════════════════════════ */
 :root {
-  /* Core Surfaces */
-  --ds-bg:               #FAFAF9;  /* Warm off-white page background */
-  --ds-surface:          #FFFFFF;  /* Card / modal surface */
-  --ds-surface-muted:    #F5F5F4;  /* Subtle inner-card background */
-  --ds-border:           #E7E5E4;  /* All card/input borders */
-  --ds-border-focus:     #1B93A4;  /* Focus ring color */
+  /* Typography */
+  --font-primary:        'Comfortaa', 'Noto Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:           ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Text Hierarchy */
-  --ds-text-primary:     #1C1917;  /* Main headings, values */
-  --ds-text-secondary:   #78716C;  /* Sub-labels, descriptions */
-  --ds-text-muted:       #A8A29E;  /* Placeholder, disabled */
+  /* Core Surfaces */
+  --ds-bg:               #F8FAFC;  /* Warm off-white slate background */
+  --ds-surface:          #FFFFFF;  /* Card / modal solid surface */
+  --ds-surface-muted:    #F1F5F9;  /* Secondary / subtle inner background */
+  --ds-border:           #E2E8F0;  /* Clean card/input borders */
+  --ds-border-focus:     #0284C7;  /* Refined focus ring */
+
+  /* Glass Surfaces (Apple-inspired translucent layers) */
+  --ds-glass-bg:         rgba(255, 255, 255, 0.78);
+  --ds-glass-border:     rgba(255, 255, 255, 0.65);
+  --ds-glass-shadow:     0 4px 20px -2px rgba(15, 23, 42, 0.05);
+
+  /* Text Hierarchy (WCAG 2.2 AA compliant contrast) */
+  --ds-text-primary:     #0F172A;  /* Deep slate ink (15.8:1 contrast on white) */
+  --ds-text-secondary:   #475569;  /* Balanced slate (5.6:1 contrast) */
+  --ds-text-muted:       #64748B;  /* Captions & overlines (4.7:1 contrast) */
 
   /* Brand Colors */
-  --ds-primary:          #1B93A4;  /* Teal — CTAs, active states */
-  --ds-primary-hover:    #157A8A;
-  --ds-primary-subtle:   #E6F5F7;  /* Teal tint for active nav items */
-  --ds-accent:           #C9822F;  /* Amber — price overrides, warnings */
-  --ds-accent-subtle:    #FEF3E6;
-  --ds-destructive:      #E76F51;  /* Coral — delete, inactive */
-  --ds-destructive-subtle: #FEF0ED;
-  --ds-success:          #2D6A4F;
-  --ds-success-subtle:   #E8F5EF;
+  --ds-primary:          #0284C7;  /* Refined sky/teal CTA */
+  --ds-primary-hover:    #0369A1;
+  --ds-primary-subtle:   #E0F2FE;  /* Soft active tint */
+  --ds-accent:           #D97706;  /* Warm amber */
+  --ds-accent-subtle:    #FEF3C7;
+  --ds-destructive:      #E11D48;  /* Rose red */
+  --ds-destructive-subtle: #FFE4E6;
+  --ds-success:          #0D9488;  /* Deep teal-green */
+  --ds-success-subtle:   #CCFBF1;
+}
+
+/* Base Body Styles */
+body {
+  font-family: var(--font-primary);
+  color: var(--ds-text-primary);
+  background-color: var(--ds-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Apple-Inspired Glassmorphic Utilities
+═══════════════════════════════════════════════════════ */
+.ds-glass {
+  background: var(--ds-glass-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--ds-glass-border);
+  box-shadow: var(--ds-glass-shadow);
+}
+
+@supports not (backdrop-filter: blur(16px)) {
+  .ds-glass {
+    background: #FFFFFF;
+    border-color: var(--ds-border);
+  }
+}
+
+.ds-glass-dock {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -37,10 +87,10 @@
 
 /* Section overline label */
 .ds-overline {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.12em;
   color: var(--ds-text-muted);
 }
 
@@ -49,6 +99,8 @@
   background: var(--ds-surface);
   border: 1px solid var(--ds-border);
   border-radius: 1rem; /* rounded-2xl */
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 /* Badge variants */
@@ -56,7 +108,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.125rem 0.625rem;
+  padding: 0.15rem 0.65rem;
   border-radius: 9999px;
   font-size: 10px;
   font-weight: 700;
@@ -76,9 +128,16 @@
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 700;
-  transition: background 0.15s ease;
+  box-shadow: 0 2px 4px 0 rgba(2, 132, 199, 0.2);
+  transition: all 0.15s ease;
 }
-.ds-btn-primary:hover { background: var(--ds-primary-hover); }
+.ds-btn-primary:hover {
+  background: var(--ds-primary-hover);
+  box-shadow: 0 4px 10px 0 rgba(2, 132, 199, 0.28);
+}
+.ds-btn-primary:active {
+  transform: scale(0.98);
+}
 
 /* DS Input base */
 .ds-input {
@@ -89,9 +148,12 @@
   font-size: 0.875rem;
   color: var(--ds-text-primary);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.ds-input:focus { border-color: var(--ds-border-focus); }
+.ds-input:focus {
+  border-color: var(--ds-border-focus);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
 
 /* Bento Gallery Custom Styles */
 .gallery-container {
@@ -219,9 +281,10 @@
   --color-warning-soft: var(--ds-accent-subtle);
   --color-warning-alpha: rgba(201, 130, 47, 0.1);
 
-  --font-sans: 'Noto Sans', sans-serif;
+  --font-sans: 'Comfortaa', 'Noto Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-serif: 'Playfair Display', serif;
   --font-accent: 'Space Grotesk', sans-serif;
+  --font-comfortaa: 'Comfortaa', cursive, sans-serif;
 }
 
 

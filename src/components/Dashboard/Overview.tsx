@@ -32,67 +32,67 @@ export const Overview: React.FC = () => {
   return (
     <div className="space-y-6 text-left">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-extrabold text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Overview Dashboard</h2>
-        <p className="text-sm text-[#78716C]">Real-time operational parameters, activity records, and channel feeds.</p>
+      <div className="space-y-1">
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Overview Dashboard</h2>
+        <p className="text-xs sm:text-sm text-slate-500">Real-time operational parameters, activity records, and channel feeds.</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Total Sales */}
-        <div className="bg-white p-6 rounded-2xl border border-[#E7E5E4] flex items-center justify-between">
+        <div className="ds-card p-5 sm:p-6 flex items-center justify-between hover:border-slate-300">
           <div className="space-y-1">
             <span className="ds-overline block">Total Sales</span>
-            <h3 className="text-2xl font-black text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>{formatRupees(totalRevenue)}</h3>
-            <div className="flex items-center gap-1 text-[#2D6A4F] text-xs font-bold">
+            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{formatRupees(totalRevenue)}</h3>
+            <div className="flex items-center gap-1 text-emerald-600 text-xs font-semibold">
               <TrendingUp className="w-3.5 h-3.5" />
               <span>+12.4% vs last month</span>
             </div>
           </div>
-          <div className="p-3 bg-[#E8F5EF] rounded-xl text-[#2D6A4F]">
+          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 shadow-2xs">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
         {/* Active Bookings */}
-        <div className="bg-white p-6 rounded-2xl border border-[#E7E5E4] flex items-center justify-between">
+        <div className="ds-card p-5 sm:p-6 flex items-center justify-between hover:border-slate-300">
           <div className="space-y-1">
             <span className="ds-overline block">Active Bookings</span>
-            <h3 className="text-2xl font-black text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>{activeBookings.length} Guests</h3>
-            <div className="flex items-center gap-1 text-[#78716C] text-xs font-semibold">
+            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{activeBookings.length} Guests</h3>
+            <div className="flex items-center gap-1 text-slate-500 text-xs font-medium">
               <span>{bookings.length} reservations overall</span>
             </div>
           </div>
-          <div className="p-3 bg-[#FEF3E6] rounded-xl text-[#C9822F]">
+          <div className="p-3 bg-amber-50 rounded-xl text-amber-600 shadow-2xs">
             <CalendarDays className="w-6 h-6" />
           </div>
         </div>
 
         {/* Avg Booking Price */}
-        <div className="bg-white p-6 rounded-2xl border border-[#E7E5E4] flex items-center justify-between">
+        <div className="ds-card p-5 sm:p-6 flex items-center justify-between hover:border-slate-300">
           <div className="space-y-1">
             <span className="ds-overline block">Avg Order Value</span>
-            <h3 className="text-2xl font-black text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>{formatRupees(Number(avgBookingVal))}</h3>
-            <div className="flex items-center gap-1 text-[#78716C] text-xs font-semibold">
+            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{formatRupees(Number(avgBookingVal))}</h3>
+            <div className="flex items-center gap-1 text-slate-500 text-xs font-medium">
               <span>Per booked checkout</span>
             </div>
           </div>
-          <div className="p-3 bg-[#E6F5F7] rounded-xl text-[#1B93A4]">
+          <div className="p-3 bg-sky-50 rounded-xl text-sky-600 shadow-2xs">
             <UserCheck className="w-6 h-6" />
           </div>
         </div>
 
         {/* Guest Inquiries */}
-        <div className="bg-white p-6 rounded-2xl border border-[#E7E5E4] flex items-center justify-between">
+        <div className="ds-card p-5 sm:p-6 flex items-center justify-between hover:border-slate-300">
           <div className="space-y-1">
             <span className="ds-overline block">New Inquiries</span>
-            <h3 className="text-2xl font-black text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>{unreadMessages} Messages</h3>
-            <div className="flex items-center gap-1 text-[#E76F51] text-xs font-bold">
+            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{unreadMessages} Messages</h3>
+            <div className="flex items-center gap-1 text-rose-600 text-xs font-semibold">
               <MessageSquareWarning className="w-3.5 h-3.5" />
               <span>Requires response</span>
             </div>
           </div>
-          <div className="p-3 bg-[#FEF0ED] rounded-xl text-[#E76F51]">
+          <div className="p-3 bg-rose-50 rounded-xl text-rose-600 shadow-2xs">
             <MessageSquareWarning className="w-6 h-6" />
           </div>
         </div>
@@ -101,12 +101,12 @@ export const Overview: React.FC = () => {
       {/* Grid: Bookings & Activity Logs */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left Column: Recent Bookings */}
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-[#E7E5E4] overflow-hidden flex flex-col">
-          <div className="p-5 border-b border-[#E7E5E4] flex items-center justify-between">
-            <h3 className="font-extrabold text-base text-[#1C1917]" style={{ fontFamily: 'Outfit, sans-serif' }}>Recent Reservations</h3>
+        <div className="xl:col-span-2 ds-card overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <h3 className="font-bold text-sm sm:text-base text-slate-900">Recent Reservations</h3>
             <button 
               onClick={() => setSelectedView('pricing-calendar')}
-              className="text-xs font-bold text-[#1B93A4] hover:text-[#157A8A] flex items-center gap-1"
+              className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1"
             >
               <span>Manage Rates</span>
               <ArrowRight className="w-3.5 h-3.5" />
