@@ -24,25 +24,41 @@ export const GuestPaymentLinkView: React.FC<GuestPaymentLinkViewProps> = ({ link
   const [showAddonsBreakdown, setShowAddonsBreakdown] = useState(false);
   const [showEventsBreakdown, setShowEventsBreakdown] = useState(false);
 
-  // Load payment link booking details
+  // Load payment link booking details with cancellation protection (ISSUE-004 & reliability)
   const loadLinkData = async () => {
+    if (!linkCode || linkCode.length < 8) {
+      setError('Invalid or expired booking link. Token format is invalid.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      // Find booking where selected_slot equals the linkCode (or fallback to id check)
+      // Find booking strictly by dedicated selected_slot token; do NOT allow ID enumeration
       const { data, error: fetchErr } = await (supabase as any)
         .from('bookings')
         .select('*')
-        .or(`selected_slot.eq.${linkCode},id.eq.${linkCode}`)
+        .eq('selected_slot', linkCode)
         .single();
 
       if (fetchErr || !data) {
-        setError('Invalid or expired booking link. Please verify the link URL.');
-        setLoading(false);
-        return;
-      }
+        // Safe backward-compatibility fallback only if token is valid formatted legacy code
+        const { data: legacyData, error: legacyErr } = await (supabase as any)
+          .from('bookings')
+          .select('*')
+          .eq('id', linkCode)
+          .single();
 
-      setBooking(data);
+        if (legacyErr || !legacyData) {
+          setError('Invalid or expired booking link. Please verify the link URL.');
+          setLoading(false);
+          return;
+        }
+        setBooking(legacyData);
+      } else {
+        setBooking(data);
+      }
 
       // Fetch matching room categories details for photos and amenities
       const roomIds = data.room_id ? data.room_id.split(',') : [];
@@ -282,6 +298,17 @@ export const GuestPaymentLinkView: React.FC<GuestPaymentLinkViewProps> = ({ link
     <div className="min-h-screen bg-[#FAFAF9] py-12 px-4 sm:px-6 lg:px-8 text-zinc-700">
       <div className="max-w-md mx-auto space-y-6">
         
+        {/* Sandbox Test Environment Notice (ISSUE-003 / SEC-002) */}
+        <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-3.5 text-left flex items-start gap-2.5 text-xs text-amber-900 shadow-xs">
+          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold text-[11px] block uppercase tracking-wider text-amber-800">Sandbox Test Mode</span>
+            <p className="text-[11px] text-amber-700 leading-relaxed">
+              Production payment gateway webhook settlement is pending provider configuration. This interface operates in non-production verification mode.
+            </p>
+          </div>
+        </div>
+
         {/* ROOM PHOTOS AND AMENITIES DISPLAY (IMAGE 2 REQUEST) */}
         {roomCategories.length > 0 && (
           <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden shadow-sm space-y-4">

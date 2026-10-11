@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import {
-  Plus, Calendar, DollarSign, CheckCircle2, Clock, Wallet, Users,
+  Plus, Calendar, DollarSign, CheckCircle2, Wallet, Users,
   BarChart3, LayoutDashboard, CalendarRange, Link, CalendarOff, LogOut,
   ChevronRight, ArrowLeft, Layers, Home, MapPin, Star, AlertCircle,
   Check, Loader2, Globe, Trash2, Menu, X
@@ -9,6 +9,7 @@ import {
 import { searchPlaces, getPlaceDetails, type PlaceCandidate, type PlaceDetails } from '../../services/PlacesService';
 import { supabase } from '../../lib/supabaseClient';
 import { uploadMediaFile } from '../../services/StorageService';
+import { format } from 'date-fns';
 import { BookingsView } from './BookingsView';
 import { PaymentLinksView } from './PaymentLinksView';
 import { PricingCalendarView } from './PricingCalendarView';
@@ -174,11 +175,18 @@ export const PlatformDashboard: React.FC = () => {
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
   const activeBookings = bookings.filter(b => b.bookingStatus !== 'cancelled');
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Use property local calendar date to prevent UTC midnight skew (ISSUE-006)
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const upcomingGuestsCount = activeBookings.filter(b => b.checkIn >= todayStr).reduce((sum, b) => sum + (b.adults || 1) + (b.children || 0), 0);
-  const totalRevenueINR = activeBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+  
+  // Real collected cash revenue vs gross booking value (ISSUE-005)
+  const totalCollectedRevenueINR = activeBookings.reduce((sum, b) => {
+    const paid = Number(b.paidAmount) || 0;
+    return sum + paid;
+  }, 0);
+  const totalBookingValueINR = activeBookings.reduce((sum, b) => sum + (Number(b.totalPrice) || 0), 0);
   const bookedRoomsCount = activeBookings.length;
-  const avgRevenueINR = bookedRoomsCount > 0 ? totalRevenueINR / bookedRoomsCount : 0;
+  const avgRevenueINR = bookedRoomsCount > 0 ? totalCollectedRevenueINR / bookedRoomsCount : 0;
 
   const handleSelectProperty = (id: string, name: string) => {
     setActivePropertyId(id);
@@ -356,10 +364,10 @@ export const PlatformDashboard: React.FC = () => {
 
   const statCards = [
     { label: 'Upcoming Check-ins', value: `${upcomingGuestsCount} Guests`, badge: 'Future Check-ins', icon: Calendar, iconBg: '#FFF4E5', iconColor: '#D97706' },
-    { label: 'Revenue', value: formatRupees(totalRevenueINR), badge: 'Lifetime Total', icon: DollarSign, iconBg: '#E6F4EA', iconColor: '#137333' },
-    { label: 'Booked Rooms', value: String(bookedRoomsCount), badge: 'Lifetime Total', icon: CheckCircle2, iconBg: '#EBF5FF', iconColor: '#1A73E8' },
-    { label: 'Guests', value: String(activeBookings.length), badge: 'Lifetime Total', icon: Clock, iconBg: '#F3E8FF', iconColor: '#9333EA' },
-    { label: 'Avg / Room', value: formatRupees(avgRevenueINR), badge: 'Revenue / Room', icon: Wallet, iconBg: '#E6F4EA', iconColor: '#137333' },
+    { label: 'Collected Revenue', value: formatRupees(totalCollectedRevenueINR), badge: 'Cash Collected', icon: DollarSign, iconBg: '#E6F4EA', iconColor: '#137333' },
+    { label: 'Gross Bookings', value: formatRupees(totalBookingValueINR), badge: 'Total Booked', icon: Wallet, iconBg: '#EBF5FF', iconColor: '#1A73E8' },
+    { label: 'Booked Rooms', value: String(bookedRoomsCount), badge: 'Lifetime Total', icon: CheckCircle2, iconBg: '#F3E8FF', iconColor: '#9333EA' },
+    { label: 'Avg / Room', value: formatRupees(avgRevenueINR), badge: 'Collected / Room', icon: Wallet, iconBg: '#E6F4EA', iconColor: '#137333' },
   ];
 
   const stepNum = obStep === 'type' ? 1 : obStep === 'search' ? 2 : 3;

@@ -767,8 +767,10 @@ export const PaymentLinksView: React.FC = () => {
     const totalVal = Number(totalAmount) || suggestedTotal || 0;
     const payNowVal = Number(payNowAmount) || suggestedPayNow || 0;
 
-    // Generate short random code
-    const shortCode = Math.random().toString(36).substring(2, 13);
+    // Generate high-entropy cryptographic token for secure payment link (ISSUE-004)
+    const cryptoBuffer = new Uint8Array(18);
+    window.crypto.getRandomValues(cryptoBuffer);
+    const shortCode = 'pl_' + Array.from(cryptoBuffer, byte => byte.toString(36).padStart(2, '0')).join('').substring(0, 24);
 
     // Save metadata payload (with pricing breakdown) inside the coupon_code column
     const specRequestsObj = {
