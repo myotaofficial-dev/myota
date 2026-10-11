@@ -93,9 +93,10 @@ export interface CoHost {
   id: string;
   name: string;
   phone: string;
-  role: 'super_admin' | 'manager' | 'caretaker';
+  role: 'owner' | 'super_admin' | 'manager' | 'caretaker';
   canReceiveCalls: boolean;
   canAcceptBookings: boolean;
+  userId?: string;
 }
 
 // Managed photo in media library
@@ -190,6 +191,8 @@ export interface Booking {
   createdAt: string;
   adults?: number;
   children?: number;
+  childrenAges?: number[];
+  mealPlan?: 'ep' | 'cp' | 'map' | 'ap';
   selectedSlot?: string;
   paidAmount?: number;
   refunds?: RefundRecord[];
@@ -923,6 +926,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     role: h.role as CoHost['role'],
     canReceiveCalls: h.can_receive_calls,
     canAcceptBookings: h.can_accept_bookings,
+    userId: h.user_id || undefined,
   });
 
   const mapDbMedia = (m: any): ManagedPhoto | ManagedVideo => ({
@@ -1374,15 +1378,40 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePropertyId]);
 
-  // Sync properties list from Supabase
+  // Sync properties list from Supabase (primary owner + co-owner/staff assignments in co_hosts)
   const fetchPropertiesForUser = async (ownerId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('id, name, status')
-        .eq('owner_id', ownerId);
+      const [{ data: ownedData, error: ownedError }, { data: coHostRows }] = await Promise.all([
+        supabase
+          .from('properties')
+          .select('id, name, status')
+          .eq('owner_id', ownerId),
+        supabase
+          .from('co_hosts')
+          .select('property_id')
+          .eq('user_id', ownerId)
+      ]);
 
-      if (error) throw error;
+      if (ownedError) throw ownedError;
+
+      const coHostPropIds = Array.from(
+        new Set((coHostRows || []).map((r: any) => r.property_id).filter(Boolean))
+      ) as string[];
+
+      let assignedData: any[] = [];
+      if (coHostPropIds.length > 0) {
+        const { data: extraProps } = await supabase
+          .from('properties')
+          .select('id, name, status')
+          .in('id', coHostPropIds);
+        assignedData = extraProps || [];
+      }
+
+      const combinedMap = new Map<string, any>();
+      (ownedData || []).forEach((p: any) => combinedMap.set(p.id, p));
+      assignedData.forEach((p: any) => combinedMap.set(p.id, p));
+      const data = Array.from(combinedMap.values());
+
       if (data) {
         const mapped: PropertyItem[] = data.map((p: any) => ({
           id: p.id,
@@ -1835,35 +1864,57 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt'>): Promise<string> => {
+    const tempId = generateBookingCode();
     const newBooking: Booking = {
       ...bookingData,
-      id: generateBookingCode(),
+      id: tempId,
+      paymentStatus: 'pending',
+      paidAmount: 0,
       createdAt: new Date().toISOString()
     };
     setBookings(prev => [newBooking, ...prev]);
     addEventLog('New Booking Confirmed', `Reservation booked for ${bookingData.guestName} (₹${bookingData.totalPrice})`, 'booking');
 
     try {
-      await supabase.from('bookings').insert({
-        id: newBooking.id,
-        property_id: activePropertyId,
-        room_id: newBooking.roomId || null,
-        room_name: newBooking.roomName,
-        guest_name: newBooking.guestName,
-        guest_email: newBooking.guestEmail,
-        guest_phone: newBooking.guestPhone,
-        check_in: newBooking.checkIn,
-        check_out: newBooking.checkOut,
-        total_price: newBooking.totalPrice,
-        payment_status: newBooking.paymentStatus,
-        booking_status: newBooking.bookingStatus,
-        addons: newBooking.addons,
-        coupon_code: newBooking.couponCode || null,
-        adults: newBooking.adults ?? 1,
-        children: newBooking.children ?? 0,
-        selected_slot: newBooking.selectedSlot || null,
-        paid_amount: newBooking.paidAmount || 0
+      // 1. Primary: Use secure server RPC to enforce valid initialization and server-side price calculation
+      const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc('create_guest_booking_draft', {
+        p_property_id: activePropertyId,
+        p_room_id: newBooking.roomId || null,
+        p_room_name: newBooking.roomName,
+        p_guest_name: newBooking.guestName,
+        p_guest_email: newBooking.guestEmail,
+        p_guest_phone: newBooking.guestPhone,
+        p_check_in: newBooking.checkIn,
+        p_check_out: newBooking.checkOut,
+        p_adults: newBooking.adults ?? 1,
+        p_children: newBooking.children ?? 0,
+        p_addons: newBooking.addons || [],
+        p_coupon_code: newBooking.couponCode || null,
+        p_meal_plan: newBooking.mealPlan || null,
+        p_children_ages: newBooking.childrenAges || null,
+        p_selected_slot: newBooking.selectedSlot || null
       });
+
+      if (rpcRes?.success && rpcRes?.booking_id) {
+        setBookings(prev =>
+          prev.map(b =>
+            b.id === tempId
+              ? {
+                  ...b,
+                  id: rpcRes.booking_id,
+                  totalPrice: Number(rpcRes.total_price ?? b.totalPrice),
+                  paymentStatus: 'pending',
+                  paidAmount: 0,
+                  selectedSlot: rpcRes.guest_token || b.selectedSlot
+                }
+              : b
+          )
+        );
+        return rpcRes.booking_id;
+      }
+      if (rpcErr || rpcRes?.error) {
+        console.warn('[Supabase] create_guest_booking_draft RPC error:', rpcErr || rpcRes?.error);
+      }
     } catch (err) {
       console.warn('[Supabase] addBooking error:', err);
     }
@@ -2297,16 +2348,19 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             id, property_id: activePropertyId,
             name: host.name, phone: host.phone, role: host.role,
             can_receive_calls: host.canReceiveCalls, can_accept_bookings: host.canAcceptBookings,
+            user_id: host.userId || null,
           });
         } catch (err) { console.warn('[Supabase] addCoHost:', err); }
       },
       updateCoHost: async (id: string, host: Partial<CoHost>) => {
         setCoHosts(prev => prev.map(h => h.id === id ? { ...h, ...host } : h));
         try {
-          await supabase.from('co_hosts').update({
+          const payload: any = {
             name: host.name, phone: host.phone, role: host.role,
             can_receive_calls: host.canReceiveCalls, can_accept_bookings: host.canAcceptBookings,
-          }).eq('id', id).eq('property_id', activePropertyId);
+          };
+          if (host.userId !== undefined) payload.user_id = host.userId || null;
+          await supabase.from('co_hosts').update(payload).eq('id', id).eq('property_id', activePropertyId);
         } catch (err) { console.warn('[Supabase] updateCoHost:', err); }
       },
       deleteCoHost: async (id: string) => {

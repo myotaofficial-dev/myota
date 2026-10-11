@@ -1367,6 +1367,8 @@ export const OrganicTemplate: React.FC = () => {
       couponCode: appliedCouponCode || undefined,
       adults: adultsCount,
       children: childrenCount,
+      childrenAges,
+      mealPlan: selectedMealPlan,
       paidAmount: finalPaidAmount
     });
  
@@ -1409,6 +1411,7 @@ export const OrganicTemplate: React.FC = () => {
       addons: [],
       adults: eventAdultsCount,
       children: eventChildrenCount,
+      childrenAges: eventChildrenAges,
       selectedSlot: eventSelectedSlotId || undefined
     });
  

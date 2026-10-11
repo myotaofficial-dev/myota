@@ -1135,12 +1135,14 @@ export const DomainView: React.FC = () => {
 
   const renderOwners = () => {
     const localRoleLabel: Record<CoHost['role'], string> = {
+      owner: 'Co-Owner',
       super_admin: 'Super Admin',
       manager: 'Manager',
       caretaker: 'Caretaker',
     };
 
     const localRoleColor: Record<CoHost['role'], string> = {
+      owner: 'bg-indigo-50 border border-indigo-200 text-indigo-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
       super_admin: 'bg-blue-50 border border-blue-200 text-blue-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
       manager: 'bg-amber-50 border border-amber-200 text-amber-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
       caretaker: 'bg-emerald-50 border border-emerald-200 text-emerald-800 text-3xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
@@ -1192,6 +1194,7 @@ export const DomainView: React.FC = () => {
               <label className="text-xs font-bold text-zinc-700">Role</label>
               <select value={hostForm.role} onChange={e => setHostForm(f => ({ ...f, role: e.target.value as CoHost['role'] }))}
                 className="ds-input w-full">
+                <option value="owner">Co-Owner (Full resort ownership, billing & team access)</option>
                 <option value="super_admin">Super Admin (Full access to editing and billing)</option>
                 <option value="manager">Manager (Can modify rooms, policies, and calendar)</option>
                 <option value="caretaker">Caretaker (View only bookings, receive notifications)</option>
@@ -1243,9 +1246,9 @@ export const DomainView: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 pt-2 border-t border-zinc-150 font-sans">
-                  {host.role === 'super_admin' && (
+                  {(host.role === 'owner' || host.role === 'super_admin') && (
                     <span className="flex items-center gap-2 text-3xs text-[#1B93A4] font-bold">
-                      <Check className="w-3.5 h-3.5 text-[#1B93A4]" /> Super Admin access controls enabled
+                      <Check className="w-3.5 h-3.5 text-[#1B93A4]" /> {host.role === 'owner' ? 'Full Co-Owner access controls enabled' : 'Super Admin access controls enabled'}
                     </span>
                   )}
                   {host.canReceiveCalls && (
